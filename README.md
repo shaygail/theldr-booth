@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# theldr booth
 
-## Getting Started
+A virtual photobooth for two people in a long-distance relationship to take synchronized "together" photos, even when apart.
 
-First, run the development server:
+## Tech stack
+
+- **Next.js** (App Router) + TypeScript + Tailwind CSS
+- **Supabase** — Postgres, Realtime, Storage, Anonymous Auth
+- **getUserMedia** — browser webcam access
+- Deployable to **Vercel**
+
+## Local setup
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Create a Supabase project
+
+1. Go to [supabase.com](https://supabase.com) and create a new project.
+2. In **Authentication → Providers**, enable **Anonymous sign-ins**.
+3. In **SQL Editor**, run the migration at `supabase/migrations/001_schema.sql`.
+4. In **Project Settings → API**, copy your project URL and anon key.
+
+### 3. Configure environment variables
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local`:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+```
+
+### 4. Run the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How it works
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Create or join a room** — One partner creates a room and shares the 6-character code or invite link. The other joins with the code. The room is your permanent shared space.
+2. **Start a photobooth session** — Either partner taps "Start photobooth." The other gets a realtime prompt.
+3. **Get ready** — Both open their cameras and tap "I'm ready!" When both are ready, a synced 3-2-1 countdown runs locally on each device.
+4. **Capture & combine** — Photos upload to Supabase Storage and are stitched side-by-side into a photo strip with a date stamp.
+5. **Timeline** — All moments appear in a shared gallery. Tap to open the lightbox, add captions, or favorite a photo.
 
-## Learn More
+## Project structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/
+│   ├── page.tsx              # Landing — create/join room
+│   └── room/[code]/page.tsx  # Room view — photobooth + gallery
+├── components/
+│   ├── AuthProvider.tsx      # Anonymous auth + display name
+│   ├── RoomCreate.tsx        # Create room flow
+│   ├── RoomJoin.tsx          # Join room flow
+│   ├── RoomView.tsx          # Main room UI
+│   ├── PhotoboothSession.tsx # Session orchestration
+│   ├── PhotoCapture.tsx      # Webcam preview + filters
+│   ├── ReadyToggle.tsx       # Ready/un-ready toggle
+│   ├── CountdownTimer.tsx    # 3-2-1 countdown overlay
+│   ├── Gallery.tsx           # Shared timeline
+│   ├── Lightbox.tsx          # Full-screen photo view
+│   └── SessionPrompt.tsx     # Partner started session notification
+├── hooks/
+│   ├── useWebcam.ts          # getUserMedia wrapper
+│   ├── useRoom.ts            # Room realtime subscription
+│   └── useSessions.ts        # Sessions realtime subscription
+└── lib/
+    ├── supabase/             # Supabase clients
+    ├── combine-photos.ts     # Canvas photo strip compositor
+    └── filters.ts              # B&W, warm, vintage filters
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deploy to Vercel
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Push to GitHub.
+2. Import the repo in [Vercel](https://vercel.com).
+3. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` as environment variables.
+4. Deploy.
 
-## Deploy on Vercel
+## Edge cases handled
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Camera permission denied — clear error with retry
+- Partner hasn't joined yet — share code / copy invite link UI
+- Partner disconnects before ready — cancel session button
+- Upload failure — error state with retry guidance
+- Un-readying after partner is ready — countdown resets until both ready again
+- Room full — error when a third person tries to join
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Extras included
+
+- Photo filters (Original, B&W, Warm, Vintage)
+- "X days since last photobooth" counter
+- In-app session prompt when partner starts a session

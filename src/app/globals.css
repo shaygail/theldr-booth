@@ -1,26 +1,90 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fff8f3;
+  --foreground: #3d405b;
+  --cream: #fff8f3;
+  --coral: #e07a5f;
+  --gold: #f2cc8f;
+  --sage: #81b29a;
+  --warm-900: #2d3142;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-cream: #fff8f3;
+  --color-coral-500: #e07a5f;
+  --color-coral-600: #c96a52;
+  --color-gold-200: #f2cc8f;
+  --color-gold-300: #e8b96a;
+  --color-sage-500: #81b29a;
+  --color-sage-600: #6a9a82;
+  --color-warm-200: #f5ebe0;
+  --color-warm-300: #e8ddd0;
+  --color-warm-500: #9a8c7a;
+  --color-warm-600: #6b5f52;
+  --color-warm-700: #4a4238;
+  --color-warm-800: #3d405b;
+  --color-warm-900: #2d3142;
+  --font-sans: var(--font-nunito), system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-2xl bg-coral-500 text-white font-semibold px-6 py-3 shadow-lg shadow-coral-500/25 hover:bg-coral-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-2xl bg-warm-200 text-warm-800 font-semibold px-6 py-3 hover:bg-warm-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-2xl text-warm-600 font-medium px-4 py-2 hover:bg-warm-200/60 transition-colors;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-gold-200 bg-cream px-4 py-3 text-warm-800 placeholder:text-warm-500 focus:outline-none focus:ring-2 focus:ring-coral-500/40 focus:border-coral-500 transition-shadow;
+  }
+}
+
+@keyframes countdown-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-countdown {
+  animation: countdown-pop 0.5s ease-out;
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.4s ease-out;
 }
