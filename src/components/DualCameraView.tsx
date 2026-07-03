@@ -2,85 +2,45 @@
 
 import type { PhotoFilter } from "@/types/database";
 import { FILTER_OPTIONS } from "@/lib/filters";
-import {
-  BACKGROUND_OPTIONS,
-  getBackgroundCSS,
-  type BackgroundId,
-} from "@/lib/backgrounds";
-import { supportsAISegmentation } from "@/lib/device";
 import type { WebcamState } from "@/hooks/useWebcam";
 import type { PartnerVideoStatus } from "@/hooks/usePartnerVideo";
 
 interface DualCameraViewProps {
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
   partnerVideoRef: React.RefObject<HTMLVideoElement | null>;
-  localOutputRef: React.RefObject<HTMLCanvasElement | null>;
-  partnerOutputRef: React.RefObject<HTMLCanvasElement | null>;
-  localShowProcessed: boolean;
-  partnerShowProcessed: boolean;
-  backgroundLoading: boolean;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   state: WebcamState;
   error: string | null;
   filter: PhotoFilter;
-  background: BackgroundId;
   partnerName: string;
   partnerStatus: PartnerVideoStatus;
   onFilterChange: (filter: PhotoFilter) => void;
-  onBackgroundChange: (background: BackgroundId) => void;
   onStart: () => void;
   onRetry: () => void;
 }
 
 function CameraPane({
   videoRef,
-  outputRef,
-  showProcessed,
-  sceneBackdrop,
-  sceneStyle,
-  useAIOutput,
   label,
   mirrored = false,
   overlay,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
-  outputRef?: React.RefObject<HTMLCanvasElement | null>;
-  showProcessed: boolean;
-  sceneBackdrop: boolean;
-  sceneStyle?: string;
-  useAIOutput: boolean;
   label: string;
   mirrored?: boolean;
   overlay?: React.ReactNode;
 }) {
-  const insetVideo = sceneBackdrop && !showProcessed;
-
   return (
-    <div
-      className="relative flex-1 min-w-0 aspect-[3/4] overflow-hidden"
-      style={{ background: sceneStyle ?? "#e8ddd0" }}
-    >
+    <div className="relative flex-1 min-w-0 aspect-[3/4] bg-warm-300 overflow-hidden">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className={`absolute object-cover ${
+        className={`absolute inset-0 w-full h-full object-cover ${
           mirrored ? "scale-x-[-1]" : ""
-        } ${showProcessed ? "invisible" : "visible"} ${
-          insetVideo
-            ? "inset-2 rounded-xl border-2 border-white/25 shadow-md"
-            : "inset-0 w-full h-full"
         }`}
       />
-      {useAIOutput && outputRef && (
-        <canvas
-          ref={outputRef}
-          className={`absolute inset-0 w-full h-full ${
-            showProcessed ? "visible" : "invisible"
-          }`}
-        />
-      )}
       {overlay}
       <span className="absolute bottom-2 left-2 z-10 text-xs font-semibold text-white bg-warm-900/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
         {label}
@@ -92,31 +52,17 @@ function CameraPane({
 export function DualCameraView({
   localVideoRef,
   partnerVideoRef,
-  localOutputRef,
-  partnerOutputRef,
-  localShowProcessed,
-  partnerShowProcessed,
-  backgroundLoading,
   canvasRef,
   state,
   error,
   filter,
-  background,
   partnerName,
   partnerStatus,
   onFilterChange,
-  onBackgroundChange,
   onStart,
   onRetry,
 }: DualCameraViewProps) {
   const cameraActive = state === "active";
-  const aiScenes = supportsAISegmentation();
-  const hasScene = background !== "none";
-  const sceneStyle = hasScene ? getBackgroundCSS(background) : undefined;
-
-  const localSceneBackdrop = hasScene && cameraActive && !localShowProcessed;
-  const partnerSceneBackdrop =
-    hasScene && partnerStatus === "connected" && !partnerShowProcessed;
 
   const localOverlay = !cameraActive ? (
     <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center bg-warm-200/90 p-4 text-center">
@@ -169,31 +115,16 @@ export function DualCameraView({
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-      {backgroundLoading && hasScene && aiScenes && (
-        <p className="text-xs text-warm-600 animate-pulse">
-          Loading virtual backgrounds…
-        </p>
-      )}
       <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-xl border border-gold-200">
         <div className="flex divide-x-2 divide-coral-500/30">
           <CameraPane
             videoRef={localVideoRef}
-            outputRef={localOutputRef}
-            showProcessed={localShowProcessed}
-            sceneBackdrop={localSceneBackdrop}
-            sceneStyle={sceneStyle}
-            useAIOutput={aiScenes && hasScene}
             label="You"
             mirrored
             overlay={localOverlay}
           />
           <CameraPane
             videoRef={partnerVideoRef}
-            outputRef={partnerOutputRef}
-            showProcessed={partnerShowProcessed}
-            sceneBackdrop={partnerSceneBackdrop}
-            sceneStyle={sceneStyle}
-            useAIOutput={aiScenes && hasScene}
             label={partnerName}
             overlay={partnerOverlay}
           />
@@ -202,47 +133,21 @@ export function DualCameraView({
       </div>
 
       {cameraActive && (
-        <>
-          <div className="flex gap-2 flex-wrap justify-center">
-            <span className="text-xs text-warm-500 w-full text-center mb-0.5">
-              Scene
-              {!aiScenes && hasScene && (
-                <span className="text-warm-400"> · backdrop mode on iPad</span>
-              )}
-            </span>
-            {BACKGROUND_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => onBackgroundChange(opt.id)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  background === opt.id
-                    ? "bg-sage-500 text-white"
-                    : "bg-warm-200 text-warm-700 hover:bg-warm-300"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2 flex-wrap justify-center">
-            <span className="text-xs text-warm-500 w-full text-center mb-0.5">
-              Filter
-            </span>
-            {FILTER_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => onFilterChange(opt.value)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  filter === opt.value
-                    ? "bg-coral-500 text-white"
-                    : "bg-warm-200 text-warm-700 hover:bg-warm-300"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </>
+        <div className="flex gap-2 flex-wrap justify-center">
+          {FILTER_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => onFilterChange(opt.value)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                filter === opt.value
+                  ? "bg-coral-500 text-white"
+                  : "bg-warm-200 text-warm-700 hover:bg-warm-300"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

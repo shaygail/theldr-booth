@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { combinePhotos } from "@/lib/combine-photos";
-import { captureFromCanvas } from "@/lib/segmentation";
-import type { BackgroundId } from "@/lib/backgrounds";
-import { composeVideoOnBackground } from "@/lib/backgrounds";
-import { isIOS } from "@/lib/device";
 import { useWebcam } from "@/hooks/useWebcam";
 import { usePartnerVideo } from "@/hooks/usePartnerVideo";
-import { useVirtualBackground } from "@/hooks/useVirtualBackground";
 import type { Room, Session, PhotoFilter } from "@/types/database";
 import { DualCameraView } from "@/components/DualCameraView";
 import { ReadyToggle } from "@/components/ReadyToggle";
@@ -37,7 +32,6 @@ export function PhotoboothSession({
   onCancel,
 }: PhotoboothSessionProps) {
   const [filter, setFilter] = useState<PhotoFilter>("none");
-  const [background, setBackground] = useState<BackgroundId>("cozy-booth");
   const [phase, setPhase] = useState<Phase>("camera");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const countdownStarted = useRef(false);
@@ -61,22 +55,6 @@ export function PhotoboothSession({
     isInitiator: isMember1,
     localStream,
     enabled: isActive && (phase === "camera" || phase === "countdown"),
-  });
-
-  const localBg = useVirtualBackground({
-    videoRef,
-    backgroundId: background,
-    enabled: isActive && (phase === "camera" || phase === "countdown"),
-    mirrored: true,
-  });
-
-  const partnerBg = useVirtualBackground({
-    videoRef: partnerVideoRef,
-    backgroundId: background,
-    enabled:
-      partnerStatus === "connected" &&
-      (phase === "camera" || phase === "countdown"),
-    mirrored: false,
   });
 
   const isReady = isMember1
@@ -204,28 +182,7 @@ export function PhotoboothSession({
   const handleCountdownComplete = async () => {
     setPhase("capturing");
 
-    let blob: Blob | null = null;
-    if (
-      localBg.showProcessed &&
-      localBg.outputRef.current &&
-      localBg.outputRef.current.width > 0
-    ) {
-      blob = captureFromCanvas(localBg.outputRef.current, filter);
-    } else if (
-      background !== "none" &&
-      isIOS() &&
-      videoRef.current &&
-      videoRef.current.videoWidth > 0
-    ) {
-      const composed = composeVideoOnBackground(
-        videoRef.current,
-        background,
-        true
-      );
-      blob = composed ? captureFromCanvas(composed, filter) : capture();
-    } else {
-      blob = capture();
-    }
+    const blob = capture();
     stopCamera();
 
     if (!blob) {
@@ -348,20 +305,13 @@ export function PhotoboothSession({
       <DualCameraView
         localVideoRef={videoRef}
         partnerVideoRef={partnerVideoRef}
-        localOutputRef={localBg.outputRef}
-        partnerOutputRef={partnerBg.outputRef}
-        localShowProcessed={localBg.showProcessed}
-        partnerShowProcessed={partnerBg.showProcessed}
-        backgroundLoading={localBg.modelLoading || partnerBg.modelLoading}
         canvasRef={canvasRef}
         state={webcamState}
         error={webcamError}
         filter={filter}
-        background={background}
         partnerName={partnerName}
         partnerStatus={partnerStatus}
         onFilterChange={setFilter}
-        onBackgroundChange={setBackground}
         onStart={startCamera}
         onRetry={startCamera}
       />
