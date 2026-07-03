@@ -42,7 +42,11 @@ export function Gallery({ sessions, onUpdate }: GalleryProps) {
               <img
                 src={session.combined_url ?? session.photo_1_url!}
                 alt={session.caption ?? "Photobooth moment"}
-                className="w-full aspect-[16/10] object-cover"
+                className={`w-full object-contain bg-warm-200/40 ${
+                  session.layout === "strip"
+                    ? "aspect-[3/5] max-h-96"
+                    : "aspect-[16/9]"
+                }`}
               />
               <div className="px-4 py-3 flex items-center justify-between bg-cream">
                 <time className="text-sm text-warm-600">

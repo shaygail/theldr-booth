@@ -1,13 +1,18 @@
 "use client";
 
+import type { PhotoboothLayout } from "@/types/database";
+import { layoutLabel } from "@/components/LayoutPicker";
+
 interface SessionPromptProps {
   partnerName: string;
+  layout: PhotoboothLayout;
   onAccept: () => void;
   onDismiss: () => void;
 }
 
 export function SessionPrompt({
   partnerName,
+  layout,
   onAccept,
   onDismiss,
 }: SessionPromptProps) {
@@ -20,7 +25,7 @@ export function SessionPrompt({
             {partnerName} wants to take a photo with you!
           </p>
           <p className="text-sm text-warm-600 mt-0.5">
-            Open your camera and get ready.
+            {layoutLabel(layout)} · 4 photos — open your camera and get ready.
           </p>
           <div className="flex gap-2 mt-3">
             <button onClick={onAccept} className="btn-primary text-sm py-2 px-4">

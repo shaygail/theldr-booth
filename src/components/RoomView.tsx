@@ -9,6 +9,8 @@ import { PhotoboothSession } from "@/components/PhotoboothSession";
 import { SessionPrompt } from "@/components/SessionPrompt";
 import { Gallery } from "@/components/Gallery";
 import { DaysSince } from "@/components/DaysSince";
+import { LayoutPicker, layoutLabel } from "@/components/LayoutPicker";
+import type { PhotoboothLayout } from "@/types/database";
 
 interface RoomViewProps {
   room: Room;
@@ -20,6 +22,7 @@ export function RoomView({ room }: RoomViewProps) {
   const [inSession, setInSession] = useState(false);
   const [dismissedPrompt, setDismissedPrompt] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [layout, setLayout] = useState<PhotoboothLayout>("strip");
   const [tab, setTab] = useState<"booth" | "gallery">("booth");
   const supabase = createClient();
 
@@ -55,6 +58,10 @@ export function RoomView({ room }: RoomViewProps) {
         room_id: room.id,
         initiated_by: user.id,
         status: "waiting",
+        layout,
+        shot_index: 0,
+        photo_1_urls: [],
+        photo_2_urls: [],
       })
       .select()
       .single();
@@ -97,6 +104,7 @@ export function RoomView({ room }: RoomViewProps) {
       {showPrompt && (
         <SessionPrompt
           partnerName={partnerName}
+          layout={activeSession.layout ?? "strip"}
           onAccept={handleAcceptPrompt}
           onDismiss={() => setDismissedPrompt(activeSession!.id)}
         />
@@ -166,6 +174,10 @@ export function RoomView({ room }: RoomViewProps) {
                   <p className="text-warm-700">
                     Waiting for {partnerName} to open the photobooth…
                   </p>
+                  <p className="text-sm text-warm-500">
+                    {layoutLabel(activeSession.layout ?? "strip")} ·{" "}
+                    4 photos
+                  </p>
                   <button
                     onClick={() => setInSession(true)}
                     className="btn-primary"
@@ -177,6 +189,10 @@ export function RoomView({ room }: RoomViewProps) {
                 <>
                   <p className="text-warm-700">
                     {partnerName} started a photobooth session!
+                  </p>
+                  <p className="text-sm text-warm-500">
+                    {layoutLabel(activeSession.layout ?? "strip")} ·{" "}
+                    4 photos
                   </p>
                   <button
                     onClick={() => setInSession(true)}
@@ -193,6 +209,7 @@ export function RoomView({ room }: RoomViewProps) {
               <p className="text-warm-700 text-center max-w-xs">
                 Ready to capture a moment together, even from far away?
               </p>
+              <LayoutPicker value={layout} onChange={setLayout} />
               <button
                 onClick={startSession}
                 disabled={starting}

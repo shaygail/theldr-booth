@@ -1,51 +1,109 @@
-export async function combinePhotos(
-  photo1Url: string,
-  photo2Url: string,
+import type { PhotoboothLayout } from "@/types/database";
+
+const PADDING = 20;
+const DIVIDER = 2;
+const DATE_BAR = 44;
+const GAP = 10;
+
+export async function combinePhotobooth(
+  layout: PhotoboothLayout,
+  shots: Array<{ photo1Url: string; photo2Url: string }>,
   date: Date = new Date()
 ): Promise<Blob> {
-  const [img1, img2] = await Promise.all([
-    loadImage(photo1Url),
-    loadImage(photo2Url),
-  ]);
+  const images = await Promise.all(
+    shots.map(async (shot) => {
+      const [img1, img2] = await Promise.all([
+        loadImage(shot.photo1Url),
+        loadImage(shot.photo2Url),
+      ]);
+      return { img1, img2 };
+    })
+  );
 
-  const photoWidth = 400;
-  const photoHeight = 500;
-  const padding = 24;
-  const dividerWidth = 3;
-  const dateBarHeight = 48;
-  const canvasWidth = photoWidth * 2 + dividerWidth + padding * 2;
-  const canvasHeight = photoHeight + padding * 2 + dateBarHeight;
+  const pairW = layout === "strip" ? 360 : 200;
+  const pairH = layout === "strip" ? 220 : 280;
+
+  let canvasWidth: number;
+  let canvasHeight: number;
+
+  if (layout === "strip") {
+    canvasWidth = pairW + PADDING * 2;
+    canvasHeight =
+      pairH * shots.length +
+      GAP * (shots.length - 1) +
+      PADDING * 2 +
+      DATE_BAR;
+  } else {
+    canvasWidth =
+      pairW * shots.length +
+      GAP * (shots.length - 1) +
+      PADDING * 2;
+    canvasHeight = pairH + PADDING * 2 + DATE_BAR;
+  }
 
   const canvas = document.createElement("canvas");
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
   const ctx = canvas.getContext("2d")!;
 
-  // Warm cream background
   ctx.fillStyle = "#FFF8F3";
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-  // Photo 1 (left)
-  drawPhoto(ctx, img1, padding, padding, photoWidth, photoHeight);
+  images.forEach(({ img1, img2 }, index) => {
+    if (layout === "strip") {
+      const y = PADDING + index * (pairH + GAP);
+      drawPair(ctx, img1, img2, PADDING, y, pairW, pairH);
+    } else {
+      const x = PADDING + index * (pairW + GAP);
+      drawPair(ctx, img1, img2, x, PADDING, pairW, pairH);
+    }
+  });
 
-  // Divider
-  const dividerX = padding + photoWidth;
+  drawDateStamp(ctx, canvasWidth, canvasHeight, date);
+  drawBorder(ctx, canvasWidth, canvasHeight);
+
+  return canvasToBlob(canvas);
+}
+
+/** @deprecated single-shot side-by-side; use combinePhotobooth */
+export async function combinePhotos(
+  photo1Url: string,
+  photo2Url: string,
+  date: Date = new Date()
+): Promise<Blob> {
+  return combinePhotobooth(
+    "columns",
+    [{ photo1Url, photo2Url }],
+    date
+  );
+}
+
+function drawPair(
+  ctx: CanvasRenderingContext2D,
+  img1: HTMLImageElement,
+  img2: HTMLImageElement,
+  x: number,
+  y: number,
+  pairW: number,
+  pairH: number
+) {
+  const halfW = (pairW - DIVIDER) / 2;
+  drawPhoto(ctx, img1, x, y, halfW, pairH);
+
   ctx.fillStyle = "#E07A5F";
-  ctx.globalAlpha = 0.4;
-  ctx.fillRect(dividerX, padding, dividerWidth, photoHeight);
+  ctx.globalAlpha = 0.45;
+  ctx.fillRect(x + halfW, y, DIVIDER, pairH);
   ctx.globalAlpha = 1;
 
-  // Photo 2 (right)
-  drawPhoto(
-    ctx,
-    img2,
-    padding + photoWidth + dividerWidth,
-    padding,
-    photoWidth,
-    photoHeight
-  );
+  drawPhoto(ctx, img2, x + halfW + DIVIDER, y, halfW, pairH);
+}
 
-  // Date stamp
+function drawDateStamp(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  date: Date
+) {
   const dateStr = date.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
@@ -53,25 +111,19 @@ export async function combinePhotos(
     day: "numeric",
   });
   ctx.fillStyle = "#3D405B";
-  ctx.font = "500 16px Nunito, sans-serif";
+  ctx.font = "500 14px Nunito, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(dateStr, canvasWidth / 2, canvasHeight - dateBarHeight / 2 + 6);
+  ctx.fillText(dateStr, canvasWidth / 2, canvasHeight - DATE_BAR / 2 + 5);
+}
 
-  // Subtle border
+function drawBorder(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number
+) {
   ctx.strokeStyle = "#F2CC8F";
   ctx.lineWidth = 2;
   ctx.strokeRect(1, 1, canvasWidth - 2, canvasHeight - 2);
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("Failed to create combined image"));
-      },
-      "image/jpeg",
-      0.92
-    );
-  });
 }
 
 function drawPhoto(
@@ -98,7 +150,7 @@ function drawPhoto(
   }
 
   ctx.save();
-  roundRect(ctx, x, y, width, height, 12);
+  roundRect(ctx, x, y, width, height, 8);
   ctx.clip();
   ctx.drawImage(img, sx, sy, sw, sh, x, y, width, height);
   ctx.restore();
@@ -123,6 +175,19 @@ function roundRect(
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Failed to create combined image"));
+      },
+      "image/jpeg",
+      0.92
+    );
+  });
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {

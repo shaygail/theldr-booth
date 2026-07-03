@@ -1,5 +1,9 @@
 export type SessionStatus = "waiting" | "both_ready" | "captured" | "cancelled";
 
+export type PhotoboothLayout = "strip" | "columns";
+
+export const PHOTOS_PER_SESSION = 4;
+
 export interface Room {
   id: string;
   invite_code: string;
@@ -18,6 +22,10 @@ export interface Session {
   ready_member_2: boolean;
   photo_1_url: string | null;
   photo_2_url: string | null;
+  photo_1_urls: string[];
+  photo_2_urls: string[];
+  layout: PhotoboothLayout;
+  shot_index: number;
   combined_url: string | null;
   caption: string | null;
   favorited: boolean;
