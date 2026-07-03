@@ -32,9 +32,14 @@ type Phase =
   | "error";
 
 function photoUrls(session: Session) {
+  const normalize = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value as string[];
+    return [];
+  };
+
   return {
-    photos1: session.photo_1_urls ?? [],
-    photos2: session.photo_2_urls ?? [],
+    photos1: normalize(session.photo_1_urls),
+    photos2: normalize(session.photo_2_urls),
   };
 }
 
@@ -51,14 +56,20 @@ export function PhotoboothSession({
   const [phase, setPhase] = useState<Phase>("camera");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [betweenShot, setBetweenShot] = useState(0);
+  const [multiShotActive, setMultiShotActive] = useState(false);
   const countdownStarted = useRef(false);
-  const multiShotActive = useRef(false);
   const combining = useRef(false);
+  const nextCountdownForShot = useRef(-1);
+  const shotIndexRef = useRef(session.shot_index);
   const supabase = createClient();
 
   const layout = session.layout ?? "strip";
   const { photos1, photos2 } = photoUrls(session);
   const completedShots = Math.min(photos1.length, photos2.length);
+
+  useEffect(() => {
+    shotIndexRef.current = session.shot_index;
+  }, [session.shot_index]);
 
   const {
     videoRef,
@@ -97,7 +108,7 @@ export function PhotoboothSession({
       isActive &&
       phase === "camera" &&
       !countdownStarted.current &&
-      !multiShotActive.current
+      !multiShotActive
     ) {
       countdownStarted.current = true;
       setPhase("countdown");
@@ -107,31 +118,7 @@ export function PhotoboothSession({
       countdownStarted.current = false;
       setPhase("camera");
     }
-  }, [bothReady, isActive, phase]);
-
-  useEffect(() => {
-    if (
-      !multiShotActive.current ||
-      session.shot_index <= 0 ||
-      session.shot_index >= PHOTOS_PER_SESSION ||
-      !isActive ||
-      phase !== "camera" ||
-      countdownStarted.current
-    ) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      countdownStarted.current = true;
-      setPhase("countdown");
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, [session.shot_index, isActive, phase]);
-
-  useEffect(() => {
-    return () => stopCamera();
-  }, [stopCamera]);
+  }, [bothReady, isActive, phase, multiShotActive]);
 
   const tryCombineAndFinish = useCallback(
     async (urls1: string[], urls2: string[]) => {
@@ -180,31 +167,61 @@ export function PhotoboothSession({
   );
 
   useEffect(() => {
-    if (!isMember1 || combining.current || session.combined_url) return;
+    if (photos1.length !== photos2.length) return;
 
-    const { photos1: p1, photos2: p2 } = photoUrls(session);
-    if (p1.length !== p2.length || p1.length === 0) return;
+    const done = photos1.length;
+    if (done === 0 || done <= session.shot_index) return;
+    if (done > PHOTOS_PER_SESSION) return;
 
-    const done = p1.length;
+    shotIndexRef.current = done;
 
-    if (done < PHOTOS_PER_SESSION && done > session.shot_index) {
-      supabase
-        .from("sessions")
-        .update({ shot_index: done })
-        .eq("id", session.id);
-    } else if (done === PHOTOS_PER_SESSION) {
-      tryCombineAndFinish(p1, p2);
+    supabase
+      .from("sessions")
+      .update({ shot_index: done })
+      .eq("id", session.id);
+
+    if (done === PHOTOS_PER_SESSION && isMember1 && !session.combined_url) {
+      tryCombineAndFinish(photos1, photos2);
     }
   }, [
-    session.photo_1_urls,
-    session.photo_2_urls,
+    photos1,
+    photos2,
     session.shot_index,
     session.combined_url,
     isMember1,
-    session,
     supabase,
     tryCombineAndFinish,
   ]);
+
+  useEffect(() => {
+    if (!multiShotActive) return;
+    if (!isActive) return;
+    if (phase !== "camera") return;
+    if (countdownStarted.current) return;
+    if (completedShots >= PHOTOS_PER_SESSION) return;
+    if (photos1.length !== photos2.length) return;
+    if (nextCountdownForShot.current >= completedShots) return;
+
+    nextCountdownForShot.current = completedShots;
+
+    const timer = setTimeout(() => {
+      countdownStarted.current = true;
+      setPhase("countdown");
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [
+    multiShotActive,
+    isActive,
+    phase,
+    completedShots,
+    photos1.length,
+    photos2.length,
+  ]);
+
+  useEffect(() => {
+    return () => stopCamera();
+  }, [stopCamera]);
 
   const toggleReady = async () => {
     const field = isMember1 ? "ready_member_1" : "ready_member_2";
@@ -249,8 +266,16 @@ export function PhotoboothSession({
         data: { publicUrl },
       } = supabase.storage.from("photos").getPublicUrl(path);
 
+      const { data: fresh } = await supabase
+        .from("sessions")
+        .select("photo_1_urls, photo_2_urls")
+        .eq("id", session.id)
+        .single();
+
       const urlField = isMember1 ? "photo_1_urls" : "photo_2_urls";
-      const current = isMember1 ? photos1 : photos2;
+      const current = isMember1
+        ? (fresh?.photo_1_urls ?? [])
+        : (fresh?.photo_2_urls ?? []);
       const updated = [...current, publicUrl];
 
       await supabase
@@ -260,7 +285,7 @@ export function PhotoboothSession({
 
       return publicUrl;
     },
-    [room.id, session.id, isMember1, photos1, photos2, supabase]
+    [room.id, session.id, isMember1, supabase]
   );
 
   const handleCountdownComplete = async () => {
@@ -278,13 +303,13 @@ export function PhotoboothSession({
     setPhase("uploading");
 
     try {
-      const shotIndex = session.shot_index;
+      const shotIndex = shotIndexRef.current;
       await uploadPhoto(blob, shotIndex);
 
       const moreShots = shotIndex + 1 < PHOTOS_PER_SESSION;
 
       if (moreShots) {
-        multiShotActive.current = true;
+        setMultiShotActive(true);
         countdownStarted.current = false;
         setBetweenShot(shotIndex + 1);
         setPhase("between");
@@ -341,7 +366,7 @@ export function PhotoboothSession({
         <p className="text-warm-600">
           {phase === "capturing"
             ? "Smile! 📸"
-            : `Saving photo ${session.shot_index + 1} of ${PHOTOS_PER_SESSION}…`}
+            : `Saving photo ${shotIndexRef.current + 1} of ${PHOTOS_PER_SESSION}…`}
         </p>
       </div>
     );
@@ -407,7 +432,7 @@ export function PhotoboothSession({
         onRetry={startCamera}
       />
 
-      {isActive && phase === "camera" && !multiShotActive.current && (
+      {isActive && phase === "camera" && !multiShotActive && (
         <ReadyToggle
           isReady={isReady}
           partnerReady={partnerReady}
@@ -417,9 +442,11 @@ export function PhotoboothSession({
         />
       )}
 
-      {isActive && phase === "camera" && multiShotActive.current && (
+      {isActive && phase === "camera" && multiShotActive && (
         <p className="text-sm text-warm-600 text-center animate-pulse">
-          Next photo starting soon…
+          {photos1.length !== photos2.length
+            ? `Waiting for ${partnerName}…`
+            : "Next photo starting soon…"}
         </p>
       )}
 
