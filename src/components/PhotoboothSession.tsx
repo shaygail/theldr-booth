@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { combinePhotos } from "@/lib/combine-photos";
 import { useWebcam } from "@/hooks/useWebcam";
+import { usePartnerVideo } from "@/hooks/usePartnerVideo";
 import type { Room, Session, PhotoFilter } from "@/types/database";
-import { PhotoCapture } from "@/components/PhotoCapture";
+import { DualCameraView } from "@/components/DualCameraView";
 import { ReadyToggle } from "@/components/ReadyToggle";
 import { CountdownTimer } from "@/components/CountdownTimer";
 
@@ -45,7 +46,16 @@ export function PhotoboothSession({
     stop: stopCamera,
     capture,
     isActive,
+    localStream,
   } = useWebcam({ filter });
+
+  const { partnerVideoRef, status: partnerStatus } = usePartnerVideo({
+    sessionId: session.id,
+    userId,
+    isInitiator: isMember1,
+    localStream,
+    enabled: isActive && (phase === "camera" || phase === "countdown"),
+  });
 
   const isReady = isMember1
     ? session.ready_member_1
@@ -292,12 +302,15 @@ export function PhotoboothSession({
 
   return (
     <div className="flex flex-col items-center gap-6 w-full">
-      <PhotoCapture
-        videoRef={videoRef}
+      <DualCameraView
+        localVideoRef={videoRef}
+        partnerVideoRef={partnerVideoRef}
         canvasRef={canvasRef}
         state={webcamState}
         error={webcamError}
         filter={filter}
+        partnerName={partnerName}
+        partnerStatus={partnerStatus}
         onFilterChange={setFilter}
         onStart={startCamera}
         onRetry={startCamera}

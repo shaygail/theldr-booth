@@ -23,6 +23,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
   const streamRef = useRef<MediaStream | null>(null);
   const [state, setState] = useState<WebcamState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
   const start = useCallback(async () => {
     setState("requesting");
@@ -43,6 +44,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
       });
 
       streamRef.current = stream;
+      setLocalStream(stream);
 
       const video = videoRef.current;
       if (video) {
@@ -54,6 +56,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
     } catch (err) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      setLocalStream(null);
 
       const message =
         err instanceof DOMException && err.name === "NotAllowedError"
@@ -86,6 +89,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    setLocalStream(null);
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
@@ -137,6 +141,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
     canvasRef,
     state,
     error,
+    localStream,
     start,
     stop,
     capture,
