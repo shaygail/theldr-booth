@@ -498,6 +498,10 @@ export function PhotoboothSession({
           onRetry={startCamera}
         />
 
+        {phase === "countdown" && (
+          <CountdownTimer onComplete={handleCountdownComplete} />
+        )}
+
         {overlayMessage && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl bg-warm-900/50 backdrop-blur-sm">
             {phase === "uploading" || phase === "capturing" ? (
@@ -534,10 +538,6 @@ export function PhotoboothSession({
         <button onClick={handleCancel} className="btn-ghost text-sm">
           Cancel session
         </button>
-      )}
-
-      {phase === "countdown" && (
-        <CountdownTimer onComplete={handleCountdownComplete} />
       )}
     </div>
   );

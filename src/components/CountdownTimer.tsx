@@ -7,7 +7,7 @@ interface CountdownTimerProps {
   seconds?: number;
 }
 
-export function CountdownTimer({ onComplete, seconds = 3 }: CountdownTimerProps) {
+export function CountdownTimer({ onComplete, seconds = 10 }: CountdownTimerProps) {
   const [count, setCount] = useState(seconds);
 
   useEffect(() => {
@@ -21,10 +21,10 @@ export function CountdownTimer({ onComplete, seconds = 3 }: CountdownTimerProps)
   }, [count, onComplete]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-warm-900/60 backdrop-blur-sm">
+    <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none rounded-2xl">
       <div
         key={count}
-        className="text-[8rem] font-serif font-bold text-cream animate-countdown"
+        className="text-7xl sm:text-8xl font-serif font-bold text-cream animate-countdown drop-shadow-[0_2px_16px_rgba(0,0,0,0.85)]"
         aria-live="assertive"
         aria-label={`${count}`}
       >
