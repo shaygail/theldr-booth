@@ -118,8 +118,17 @@ export function usePartnerVideo({
     pc.ontrack = (event) => {
       const stream = event.streams[0];
       if (partnerVideoRef.current && stream) {
-        partnerVideoRef.current.srcObject = stream;
-        partnerVideoRef.current.play().catch(() => {});
+        const el = partnerVideoRef.current;
+        el.srcObject = stream;
+        el.setAttribute("playsinline", "true");
+        el.setAttribute("webkit-playsinline", "true");
+        el.muted = true;
+        const play = () => el.play().catch(() => {});
+        if (el.readyState >= 1) {
+          play();
+        } else {
+          el.onloadedmetadata = play;
+        }
       }
       setStatus("connected");
     };

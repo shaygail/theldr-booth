@@ -1,19 +1,39 @@
 import type { PhotoFilter } from "@/types/database";
 import { applyFilter } from "@/lib/filters";
+import { supportsVirtualBackground } from "@/lib/device";
 import type * as bodyPixType from "@tensorflow-models/body-pix";
 import type { BackgroundId } from "@/lib/backgrounds";
 import { getBackgroundCanvas } from "@/lib/backgrounds";
 
 let netPromise: Promise<bodyPixType.BodyPix> | null = null;
 let bodyPixModule: typeof bodyPixType | null = null;
+let backendReady = false;
+
+async function initBackend() {
+  const tf = await import("@tensorflow/tfjs-core");
+  await import("@tensorflow/tfjs-backend-webgl");
+
+  const backends = ["webgl", "cpu"] as const;
+  for (const backend of backends) {
+    try {
+      await tf.setBackend(backend);
+      await tf.ready();
+      backendReady = true;
+      return;
+    } catch {
+      // try next backend
+    }
+  }
+  throw new Error("No TensorFlow backend available");
+}
 
 async function getModel() {
+  if (!supportsVirtualBackground()) {
+    throw new Error("Virtual background not supported on this device");
+  }
   if (!netPromise) {
     netPromise = (async () => {
-      const tf = await import("@tensorflow/tfjs-core");
-      await import("@tensorflow/tfjs-backend-webgl");
-      await tf.setBackend("webgl");
-
+      await initBackend();
       bodyPixModule = await import("@tensorflow-models/body-pix");
       return bodyPixModule.load({
         architecture: "MobileNetV1",
@@ -27,7 +47,9 @@ async function getModel() {
 }
 
 export async function preloadSegmentationModel() {
+  if (!supportsVirtualBackground()) return false;
   await getModel();
+  return true;
 }
 
 export async function renderWithBackground(
@@ -36,7 +58,7 @@ export async function renderWithBackground(
   backgroundId: BackgroundId,
   mirrored: boolean
 ): Promise<boolean> {
-  if (backgroundId === "none") return false;
+  if (backgroundId === "none" || !supportsVirtualBackground()) return false;
 
   const bg = getBackgroundCanvas(backgroundId);
   if (!bg) return false;
@@ -46,14 +68,14 @@ export async function renderWithBackground(
   if (!w || !h || video.readyState < 2) return false;
 
   const net = await getModel();
-  if (!bodyPixModule) return false;
+  if (!bodyPixModule || !backendReady) return false;
 
   output.width = w;
   output.height = h;
 
   const segmentation = await net.segmentPerson(video, {
     flipHorizontal: mirrored,
-    internalResolution: "medium",
+    internalResolution: "low",
     segmentationThreshold: 0.7,
   });
 

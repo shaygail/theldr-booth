@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { combinePhotos } from "@/lib/combine-photos";
 import { captureFromCanvas } from "@/lib/segmentation";
 import type { BackgroundId } from "@/lib/backgrounds";
+import { isIOS } from "@/lib/device";
 import { useWebcam } from "@/hooks/useWebcam";
 import { usePartnerVideo } from "@/hooks/usePartnerVideo";
 import { useVirtualBackground } from "@/hooks/useVirtualBackground";
@@ -35,7 +36,9 @@ export function PhotoboothSession({
   onCancel,
 }: PhotoboothSessionProps) {
   const [filter, setFilter] = useState<PhotoFilter>("none");
-  const [background, setBackground] = useState<BackgroundId>("cozy-booth");
+  const [background, setBackground] = useState<BackgroundId>(() =>
+    typeof window !== "undefined" && isIOS() ? "none" : "cozy-booth"
+  );
   const [phase, setPhase] = useState<Phase>("camera");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const countdownStarted = useRef(false);
@@ -204,7 +207,7 @@ export function PhotoboothSession({
 
     let blob: Blob | null = null;
     if (
-      localBg.active &&
+      localBg.showProcessed &&
       localBg.outputRef.current &&
       localBg.outputRef.current.width > 0
     ) {
@@ -336,7 +339,8 @@ export function PhotoboothSession({
         partnerVideoRef={partnerVideoRef}
         localOutputRef={localBg.outputRef}
         partnerOutputRef={partnerBg.outputRef}
-        useVirtualBackground={background !== "none"}
+        localShowProcessed={localBg.showProcessed}
+        partnerShowProcessed={partnerBg.showProcessed}
         backgroundLoading={localBg.modelLoading || partnerBg.modelLoading}
         canvasRef={canvasRef}
         state={webcamState}

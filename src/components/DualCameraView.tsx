@@ -3,6 +3,7 @@
 import type { PhotoFilter } from "@/types/database";
 import { FILTER_OPTIONS } from "@/lib/filters";
 import { BACKGROUND_OPTIONS, type BackgroundId } from "@/lib/backgrounds";
+import { supportsVirtualBackground } from "@/lib/device";
 import type { WebcamState } from "@/hooks/useWebcam";
 import type { PartnerVideoStatus } from "@/hooks/usePartnerVideo";
 
@@ -11,7 +12,8 @@ interface DualCameraViewProps {
   partnerVideoRef: React.RefObject<HTMLVideoElement | null>;
   localOutputRef: React.RefObject<HTMLCanvasElement | null>;
   partnerOutputRef: React.RefObject<HTMLCanvasElement | null>;
-  useVirtualBackground: boolean;
+  localShowProcessed: boolean;
+  partnerShowProcessed: boolean;
   backgroundLoading: boolean;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   state: WebcamState;
@@ -29,39 +31,36 @@ interface DualCameraViewProps {
 function CameraPane({
   videoRef,
   outputRef,
-  useProcessed,
+  showProcessed,
   label,
   mirrored = false,
   overlay,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   outputRef?: React.RefObject<HTMLCanvasElement | null>;
-  useProcessed: boolean;
+  showProcessed: boolean;
   label: string;
   mirrored?: boolean;
   overlay?: React.ReactNode;
 }) {
   return (
-    <div className="relative flex-1 min-w-0 aspect-[3/4] bg-warm-300">
+    <div className="relative flex-1 min-w-0 aspect-[3/4] bg-warm-300 overflow-hidden">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className={
-          useProcessed
-            ? "sr-only"
-            : `absolute inset-0 w-full h-full object-cover ${
-                mirrored ? "scale-x-[-1]" : ""
-              }`
-        }
+        className={`absolute inset-0 w-full h-full object-cover z-0 ${
+          mirrored ? "scale-x-[-1]" : ""
+        } ${showProcessed ? "opacity-0" : "opacity-100"}`}
       />
       {outputRef && (
         <canvas
           ref={outputRef}
-          className={`absolute inset-0 w-full h-full object-cover ${
-            useProcessed ? "block" : "hidden"
+          className={`absolute inset-0 w-full h-full z-[1] ${
+            showProcessed ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
+          style={{ objectFit: "cover" }}
         />
       )}
       {overlay}
@@ -77,7 +76,8 @@ export function DualCameraView({
   partnerVideoRef,
   localOutputRef,
   partnerOutputRef,
-  useVirtualBackground,
+  localShowProcessed,
+  partnerShowProcessed,
   backgroundLoading,
   canvasRef,
   state,
@@ -92,12 +92,10 @@ export function DualCameraView({
   onRetry,
 }: DualCameraViewProps) {
   const cameraActive = state === "active";
-  const showProcessed = useVirtualBackground && cameraActive;
-  const showPartnerProcessed =
-    useVirtualBackground && partnerStatus === "connected";
+  const vbSupported = supportsVirtualBackground();
 
   const localOverlay = !cameraActive ? (
-    <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center bg-warm-200 p-4 text-center">
+    <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center bg-warm-200 p-4 text-center">
       {state === "idle" && (
         <>
           <span className="text-3xl mb-2">📷</span>
@@ -129,7 +127,7 @@ export function DualCameraView({
 
   const partnerOverlay =
     partnerStatus !== "connected" ? (
-      <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center bg-warm-200 p-3 text-center">
+      <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center bg-warm-200 p-3 text-center">
         {!cameraActive ? (
           <p className="text-xs text-warm-500">{partnerName}</p>
         ) : (
@@ -147,7 +145,7 @@ export function DualCameraView({
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-      {backgroundLoading && useVirtualBackground && (
+      {backgroundLoading && background !== "none" && vbSupported && (
         <p className="text-xs text-warm-600 animate-pulse">
           Loading virtual backgrounds…
         </p>
@@ -157,7 +155,7 @@ export function DualCameraView({
           <CameraPane
             videoRef={localVideoRef}
             outputRef={localOutputRef}
-            useProcessed={showProcessed}
+            showProcessed={localShowProcessed}
             label="You"
             mirrored
             overlay={localOverlay}
@@ -165,7 +163,7 @@ export function DualCameraView({
           <CameraPane
             videoRef={partnerVideoRef}
             outputRef={partnerOutputRef}
-            useProcessed={showPartnerProcessed}
+            showProcessed={partnerShowProcessed}
             label={partnerName}
             overlay={partnerOverlay}
           />
@@ -175,24 +173,31 @@ export function DualCameraView({
 
       {cameraActive && (
         <>
-          <div className="flex gap-2 flex-wrap justify-center">
-            <span className="text-xs text-warm-500 w-full text-center mb-0.5">
-              Scene
-            </span>
-            {BACKGROUND_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => onBackgroundChange(opt.id)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  background === opt.id
-                    ? "bg-sage-500 text-white"
-                    : "bg-warm-200 text-warm-700 hover:bg-warm-300"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          {vbSupported ? (
+            <div className="flex gap-2 flex-wrap justify-center">
+              <span className="text-xs text-warm-500 w-full text-center mb-0.5">
+                Scene
+              </span>
+              {BACKGROUND_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => onBackgroundChange(opt.id)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    background === opt.id
+                      ? "bg-sage-500 text-white"
+                      : "bg-warm-200 text-warm-700 hover:bg-warm-300"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-warm-500 text-center px-4">
+              Virtual scenes work best on desktop — your camera shows normally on
+              iPad.
+            </p>
+          )}
           <div className="flex gap-2 flex-wrap justify-center">
             <span className="text-xs text-warm-500 w-full text-center mb-0.5">
               Filter

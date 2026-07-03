@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { BackgroundId } from "@/lib/backgrounds";
+import { supportsVirtualBackground } from "@/lib/device";
 import {
   preloadSegmentationModel,
   renderWithBackground,
@@ -22,10 +23,17 @@ export function useVirtualBackground({
 }: UseVirtualBackgroundOptions) {
   const outputRef = useRef<HTMLCanvasElement>(null);
   const [modelLoading, setModelLoading] = useState(false);
-  const active = enabled && backgroundId !== "none";
+  const [hasFrame, setHasFrame] = useState(false);
+  const [supported] = useState(supportsVirtualBackground());
+
+  const active =
+    supported && enabled && backgroundId !== "none";
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      setHasFrame(false);
+      return;
+    }
 
     let cancelled = false;
     setModelLoading(true);
@@ -34,7 +42,10 @@ export function useVirtualBackground({
         if (!cancelled) setModelLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setModelLoading(false);
+        if (!cancelled) {
+          setModelLoading(false);
+          setHasFrame(false);
+        }
       });
 
     return () => {
@@ -47,7 +58,7 @@ export function useVirtualBackground({
 
     let running = true;
     let lastFrame = 0;
-    const fps = 10;
+    const fps = 8;
 
     const loop = async (timestamp: number) => {
       if (!running) return;
@@ -58,9 +69,15 @@ export function useVirtualBackground({
         const output = outputRef.current;
         if (video && output && video.readyState >= 2) {
           try {
-            await renderWithBackground(video, output, backgroundId, mirrored);
+            const ok = await renderWithBackground(
+              video,
+              output,
+              backgroundId,
+              mirrored
+            );
+            if (ok) setHasFrame(true);
           } catch {
-            // Skip frame on error
+            setHasFrame(false);
           }
         }
       }
@@ -72,8 +89,16 @@ export function useVirtualBackground({
     return () => {
       running = false;
       cancelAnimationFrame(id);
+      setHasFrame(false);
     };
   }, [active, backgroundId, mirrored, videoRef]);
 
-  return { outputRef, active, modelLoading };
+  return {
+    outputRef,
+    active,
+    supported,
+    hasFrame,
+    modelLoading,
+    showProcessed: active && hasFrame,
+  };
 }

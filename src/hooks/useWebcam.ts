@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PhotoFilter } from "@/types/database";
 import { applyFilter } from "@/lib/filters";
+import { isIOS } from "@/lib/device";
 
 export type WebcamState =
   | "idle"
@@ -35,11 +36,13 @@ export function useWebcam(options: UseWebcamOptions = {}) {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
+        video: isIOS()
+          ? { facingMode: "user" }
+          : {
+              facingMode: "user",
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
         audio: false,
       });
 
@@ -49,7 +52,17 @@ export function useWebcam(options: UseWebcamOptions = {}) {
       const video = videoRef.current;
       if (video) {
         video.srcObject = stream;
-        await video.play();
+        video.setAttribute("playsinline", "true");
+        video.setAttribute("webkit-playsinline", "true");
+        if (video.readyState >= 1) {
+          await video.play();
+        } else {
+          await new Promise<void>((resolve) => {
+            video.onloadedmetadata = () => {
+              video.play().then(() => resolve()).catch(() => resolve());
+            };
+          });
+        }
       }
 
       setState("active");
@@ -82,6 +95,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
 
     if (video.srcObject !== stream) {
       video.srcObject = stream;
+      video.setAttribute("playsinline", "true");
       video.play().catch(() => {});
     }
   }, [state]);
