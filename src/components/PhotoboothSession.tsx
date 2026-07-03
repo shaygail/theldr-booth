@@ -59,7 +59,7 @@ export function PhotoboothSession({
   const [multiShotActive, setMultiShotActive] = useState(false);
   const countdownStarted = useRef(false);
   const combining = useRef(false);
-  const nextCountdownForShot = useRef(-1);
+  const countdownScheduledForRef = useRef(-1);
   const capturingShotIndexRef = useRef(0);
   const supabase = createClient();
 
@@ -150,6 +150,7 @@ export function PhotoboothSession({
 
   const startCountdown = useCallback((shotIndex: number) => {
     capturingShotIndexRef.current = shotIndex;
+    countdownScheduledForRef.current = shotIndex;
     countdownStarted.current = true;
     setPhase("countdown");
   }, []);
@@ -210,12 +211,11 @@ export function PhotoboothSession({
     if (countdownStarted.current) return;
     if (completedShots >= PHOTOS_PER_SESSION) return;
     if (photos1.length !== photos2.length) return;
-    if (session.shot_index < completedShots) return;
-    if (nextCountdownForShot.current >= completedShots) return;
-
-    nextCountdownForShot.current = completedShots;
+    if (countdownScheduledForRef.current >= completedShots) return;
 
     const timer = setTimeout(() => {
+      if (countdownScheduledForRef.current >= completedShots) return;
+      countdownScheduledForRef.current = completedShots;
       startCountdown(completedShots);
     }, 2000);
 
@@ -227,7 +227,6 @@ export function PhotoboothSession({
     completedShots,
     photos1.length,
     photos2.length,
-    session.shot_index,
     startCountdown,
   ]);
 
