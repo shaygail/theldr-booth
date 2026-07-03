@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Session } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
+import { downloadImage, photoboothFilename } from "@/lib/download-image";
 
 interface LightboxProps {
   session: Session;
@@ -13,6 +14,8 @@ interface LightboxProps {
 export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
   const [caption, setCaption] = useState(session.caption ?? "");
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const supabase = createClient();
 
   const imageUrl = session.combined_url ?? session.photo_1_url;
@@ -35,6 +38,21 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
     onUpdate();
   };
 
+  const handleDownload = async () => {
+    if (!imageUrl) return;
+
+    setDownloading(true);
+    setDownloadError(null);
+
+    try {
+      await downloadImage(imageUrl, photoboothFilename(session.created_at));
+    } catch {
+      setDownloadError("Download failed — try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 bg-warm-900/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
@@ -54,23 +72,35 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
         )}
 
         <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <time className="text-sm text-warm-600">
-              {new Date(session.created_at).toLocaleDateString("en-US", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </time>
+          <time className="text-sm text-warm-600 block">
+            {new Date(session.created_at).toLocaleDateString("en-US", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </time>
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleDownload}
+              disabled={!imageUrl || downloading}
+              className="btn-primary flex-1 text-sm py-2.5"
+            >
+              {downloading ? "Downloading…" : "Download"}
+            </button>
             <button
               onClick={toggleFavorite}
-              className="text-2xl transition-transform hover:scale-110"
+              className="btn-secondary text-2xl py-2 px-3 transition-transform hover:scale-110"
               aria-label={session.favorited ? "Unfavorite" : "Favorite"}
             >
               {session.favorited ? "❤️" : "🤍"}
             </button>
           </div>
+
+          {downloadError && (
+            <p className="text-sm text-coral-600 text-center">{downloadError}</p>
+          )}
 
           <div className="flex gap-2">
             <input
