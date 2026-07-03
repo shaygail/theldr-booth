@@ -9,7 +9,7 @@ import { PhotoboothSession } from "@/components/PhotoboothSession";
 import { SessionPrompt } from "@/components/SessionPrompt";
 import { Gallery } from "@/components/Gallery";
 import { DaysSince } from "@/components/DaysSince";
-import { LayoutPicker, layoutLabel } from "@/components/LayoutPicker";
+import { LayoutPicker, layoutLabel, layoutPhotoCount } from "@/components/LayoutPicker";
 import type { PhotoboothLayout } from "@/types/database";
 
 interface RoomViewProps {
@@ -22,7 +22,7 @@ export function RoomView({ room }: RoomViewProps) {
   const [inSession, setInSession] = useState(false);
   const [dismissedPrompt, setDismissedPrompt] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
-  const [layout, setLayout] = useState<PhotoboothLayout>("strip");
+  const [layout, setLayout] = useState<PhotoboothLayout>("single");
   const [tab, setTab] = useState<"booth" | "gallery">("booth");
   const supabase = createClient();
 
@@ -175,8 +175,11 @@ export function RoomView({ room }: RoomViewProps) {
                     Waiting for {partnerName} to open the photobooth…
                   </p>
                   <p className="text-sm text-warm-500">
-                    {layoutLabel(activeSession.layout ?? "strip")} ·{" "}
-                    4 photos
+                    {layoutLabel(activeSession.layout ?? "single")} ·{" "}
+                    {layoutPhotoCount(activeSession.layout ?? "single")} photo
+                    {layoutPhotoCount(activeSession.layout ?? "single") > 1
+                      ? "s"
+                      : ""}
                   </p>
                   <button
                     onClick={() => setInSession(true)}
@@ -191,8 +194,11 @@ export function RoomView({ room }: RoomViewProps) {
                     {partnerName} started a photobooth session!
                   </p>
                   <p className="text-sm text-warm-500">
-                    {layoutLabel(activeSession.layout ?? "strip")} ·{" "}
-                    4 photos
+                    {layoutLabel(activeSession.layout ?? "single")} ·{" "}
+                    {layoutPhotoCount(activeSession.layout ?? "single")} photo
+                    {layoutPhotoCount(activeSession.layout ?? "single") > 1
+                      ? "s"
+                      : ""}
                   </p>
                   <button
                     onClick={() => setInSession(true)}

@@ -6,7 +6,7 @@ import { combinePhotobooth } from "@/lib/combine-photos";
 import { useWebcam } from "@/hooks/useWebcam";
 import { usePartnerVideo } from "@/hooks/usePartnerVideo";
 import type { Room, Session, PhotoFilter } from "@/types/database";
-import { PHOTOS_PER_SESSION } from "@/types/database";
+import { photosPerSession } from "@/types/database";
 import { DualCameraView } from "@/components/DualCameraView";
 import { ReadyToggle } from "@/components/ReadyToggle";
 import { CountdownTimer } from "@/components/CountdownTimer";
@@ -64,6 +64,7 @@ export function PhotoboothSession({
   const supabase = createClient();
 
   const layout = session.layout ?? "strip";
+  const totalPhotos = photosPerSession(layout);
   const { photos1, photos2 } = photoUrls(session);
   const completedShots = Math.min(photos1.length, photos2.length);
 
@@ -160,14 +161,14 @@ export function PhotoboothSession({
 
     const done = photos1.length;
     if (done === 0 || done <= session.shot_index) return;
-    if (done > PHOTOS_PER_SESSION) return;
+    if (done > totalPhotos) return;
 
     supabase
       .from("sessions")
       .update({ shot_index: done })
       .eq("id", session.id);
 
-    if (done === PHOTOS_PER_SESSION && isMember1 && !session.combined_url) {
+    if (done === totalPhotos && isMember1 && !session.combined_url) {
       tryCombineAndFinish(photos1, photos2);
     }
   }, [
@@ -178,6 +179,7 @@ export function PhotoboothSession({
     isMember1,
     supabase,
     tryCombineAndFinish,
+    totalPhotos,
   ]);
 
   useEffect(() => {
@@ -209,7 +211,7 @@ export function PhotoboothSession({
     if (!isActive) return;
     if (phase !== "camera") return;
     if (countdownStarted.current) return;
-    if (completedShots >= PHOTOS_PER_SESSION) return;
+    if (completedShots >= totalPhotos) return;
     if (photos1.length !== photos2.length) return;
     if (countdownScheduledForRef.current >= completedShots) return;
 
@@ -228,6 +230,7 @@ export function PhotoboothSession({
     photos1.length,
     photos2.length,
     startCountdown,
+    totalPhotos,
   ]);
 
   useEffect(() => {
@@ -343,7 +346,7 @@ export function PhotoboothSession({
     try {
       await uploadPhoto(blob, shotIndex);
 
-      const moreShots = shotIndex + 1 < PHOTOS_PER_SESSION;
+      const moreShots = shotIndex + 1 < totalPhotos;
 
       if (moreShots) {
         setMultiShotActive(true);
@@ -422,9 +425,9 @@ export function PhotoboothSession({
     phase === "capturing"
       ? "Smile! 📸"
       : phase === "uploading"
-        ? `Saving photo ${capturingShotIndexRef.current + 1} of ${PHOTOS_PER_SESSION}…`
+        ? `Saving photo ${capturingShotIndexRef.current + 1} of ${totalPhotos}…`
         : phase === "between"
-          ? `Nice! ${betweenShot} of ${PHOTOS_PER_SESSION} — get ready…`
+          ? `Nice! ${betweenShot} of ${totalPhotos} — get ready…`
           : null;
 
   return (
@@ -435,7 +438,7 @@ export function PhotoboothSession({
         </p>
         <p className="text-sm text-warm-600 mt-0.5">
           Photo {Math.max(session.shot_index, completedShots) + 1} of{" "}
-          {PHOTOS_PER_SESSION}
+          {totalPhotos}
           {completedShots > 0 && ` · ${completedShots} saved`}
         </p>
       </div>

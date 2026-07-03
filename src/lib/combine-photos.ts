@@ -20,13 +20,16 @@ export async function combinePhotobooth(
     })
   );
 
-  const pairW = layout === "strip" ? 360 : 200;
-  const pairH = layout === "strip" ? 220 : 280;
+  const pairW = layout === "single" ? 720 : layout === "strip" ? 360 : 200;
+  const pairH = layout === "single" ? 400 : layout === "strip" ? 220 : 280;
 
   let canvasWidth: number;
   let canvasHeight: number;
 
-  if (layout === "strip") {
+  if (layout === "single") {
+    canvasWidth = pairW + PADDING * 2;
+    canvasHeight = pairH + PADDING * 2 + DATE_BAR;
+  } else if (layout === "strip") {
     canvasWidth = pairW + PADDING * 2;
     canvasHeight =
       pairH * shots.length +
@@ -50,7 +53,9 @@ export async function combinePhotobooth(
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
   images.forEach(({ img1, img2 }, index) => {
-    if (layout === "strip") {
+    if (layout === "single") {
+      drawPair(ctx, img1, img2, PADDING, PADDING, pairW, pairH);
+    } else if (layout === "strip") {
       const y = PADDING + index * (pairH + GAP);
       drawPair(ctx, img1, img2, PADDING, y, pairW, pairH);
     } else {
@@ -72,7 +77,7 @@ export async function combinePhotos(
   date: Date = new Date()
 ): Promise<Blob> {
   return combinePhotobooth(
-    "columns",
+    "single",
     [{ photo1Url, photo2Url }],
     date
   );

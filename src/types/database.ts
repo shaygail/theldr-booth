@@ -1,8 +1,10 @@
 export type SessionStatus = "waiting" | "both_ready" | "captured" | "cancelled";
 
-export type PhotoboothLayout = "strip" | "columns";
+export type PhotoboothLayout = "single" | "strip" | "columns";
 
-export const PHOTOS_PER_SESSION = 4;
+export function photosPerSession(layout: PhotoboothLayout): number {
+  return layout === "single" ? 1 : 4;
+}
 
 export interface Room {
   id: string;
