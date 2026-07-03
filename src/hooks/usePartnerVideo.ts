@@ -7,6 +7,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 export type PartnerVideoStatus = "idle" | "connecting" | "connected" | "waiting";
 
 type SignalMessage =
+  | { type: "peer-ready" }
   | { type: "offer"; sdp: RTCSessionDescriptionInit }
   | { type: "answer"; sdp: RTCSessionDescriptionInit }
   | { type: "ice"; candidate: RTCIceCandidateInit };
@@ -39,14 +40,32 @@ export function usePartnerVideo({
     setStatus("connecting");
 
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+      ],
     });
 
     localStream.getVideoTracks().forEach((track) => {
       pc.addTrack(track, localStream);
     });
 
+    const pendingIce: RTCIceCandidateInit[] = [];
+    let remoteDescSet = false;
+    let partnerIsReady = false;
     let channel: RealtimeChannel;
+    let heartbeat: ReturnType<typeof setInterval>;
+
+    const flushIce = async () => {
+      while (pendingIce.length > 0 && remoteDescSet) {
+        const candidate = pendingIce.shift()!;
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch {
+          // Ignore stale candidates
+        }
+      }
+    };
 
     const sendSignal = (message: SignalMessage) => {
       channel?.send({
@@ -54,6 +73,46 @@ export function usePartnerVideo({
         event: "webrtc",
         payload: { ...message, from: userId },
       });
+    };
+
+    const sendPeerReady = () => {
+      sendSignal({ type: "peer-ready" });
+    };
+
+    const createAndSendOffer = async () => {
+      if (!isInitiator) return;
+      try {
+        const offer = await pc.createOffer({ iceRestart: remoteDescSet });
+        await pc.setLocalDescription(offer);
+        sendSignal({ type: "offer", sdp: pc.localDescription!.toJSON() });
+      } catch {
+        // PC may be closing
+      }
+    };
+
+    const handleOffer = async (sdp: RTCSessionDescriptionInit) => {
+      if (isInitiator) return;
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        remoteDescSet = true;
+        await flushIce();
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        sendSignal({ type: "answer", sdp: pc.localDescription!.toJSON() });
+      } catch {
+        // Renegotiation race — partner will retry
+      }
+    };
+
+    const handleAnswer = async (sdp: RTCSessionDescriptionInit) => {
+      if (!isInitiator) return;
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        remoteDescSet = true;
+        await flushIce();
+      } catch {
+        // Partner may retry
+      }
     };
 
     pc.ontrack = (event) => {
@@ -74,11 +133,18 @@ export function usePartnerVideo({
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "connected") {
         setStatus("connected");
+      } else if (pc.connectionState === "connecting") {
+        setStatus("connecting");
       } else if (
         pc.connectionState === "disconnected" ||
         pc.connectionState === "failed"
       ) {
         setStatus("waiting");
+        remoteDescSet = false;
+        pendingIce.length = 0;
+        if (isInitiator && partnerIsReady) {
+          void createAndSendOffer();
+        }
       }
     };
 
@@ -92,23 +158,36 @@ export function usePartnerVideo({
       async ({ payload }: { payload: SignalMessage & { from: string } }) => {
         if (payload.from === userId) return;
 
-        try {
-          if (payload.type === "offer" && !isInitiator) {
-            await pc.setRemoteDescription(
-              new RTCSessionDescription(payload.sdp)
-            );
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            sendSignal({ type: "answer", sdp: pc.localDescription!.toJSON() });
-          } else if (payload.type === "answer" && isInitiator) {
-            await pc.setRemoteDescription(
-              new RTCSessionDescription(payload.sdp)
-            );
-          } else if (payload.type === "ice" && payload.candidate) {
-            await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        if (payload.type === "peer-ready") {
+          partnerIsReady = true;
+          if (isInitiator) {
+            await createAndSendOffer();
+          } else {
+            setStatus("connecting");
           }
-        } catch {
-          // ICE races are common — ignore non-fatal errors
+          return;
+        }
+
+        if (payload.type === "offer") {
+          await handleOffer(payload.sdp);
+          return;
+        }
+
+        if (payload.type === "answer") {
+          await handleAnswer(payload.sdp);
+          return;
+        }
+
+        if (payload.type === "ice" && payload.candidate) {
+          if (!remoteDescSet) {
+            pendingIce.push(payload.candidate);
+          } else {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+            } catch {
+              // Ignore stale candidates
+            }
+          }
         }
       }
     );
@@ -116,16 +195,23 @@ export function usePartnerVideo({
     channel.subscribe(async (subStatus) => {
       if (subStatus !== "SUBSCRIBED") return;
 
-      if (isInitiator) {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        sendSignal({ type: "offer", sdp: pc.localDescription!.toJSON() });
-      } else {
+      sendPeerReady();
+
+      if (!isInitiator) {
         setStatus("waiting");
       }
+
+      heartbeat = setInterval(() => {
+        if (pc.connectionState === "connected") return;
+        sendPeerReady();
+        if (isInitiator && partnerIsReady) {
+          void createAndSendOffer();
+        }
+      }, 2500);
     });
 
     return () => {
+      clearInterval(heartbeat);
       pc.close();
       supabase.removeChannel(channel);
       if (partnerVideoRef.current) {
