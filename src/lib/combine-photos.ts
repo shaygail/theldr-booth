@@ -8,6 +8,7 @@ const GAP = 10;
 export async function combinePhotobooth(
   layout: PhotoboothLayout,
   shots: Array<{ photo1Url: string; photo2Url: string }>,
+  stripText?: string | null,
   date: Date = new Date()
 ): Promise<Blob> {
   const images = await Promise.all(
@@ -64,7 +65,18 @@ export async function combinePhotobooth(
     }
   });
 
-  drawDateStamp(ctx, canvasWidth, canvasHeight, date);
+  drawStripText(
+    ctx,
+    canvasWidth,
+    canvasHeight,
+    stripText?.trim() ||
+      date.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+  );
   drawBorder(ctx, canvasWidth, canvasHeight);
 
   return canvasToBlob(canvas);
@@ -79,6 +91,7 @@ export async function combinePhotos(
   return combinePhotobooth(
     "single",
     [{ photo1Url, photo2Url }],
+    null,
     date
   );
 }
@@ -103,22 +116,27 @@ function drawPair(
   drawPhoto(ctx, img2, x + halfW + DIVIDER, y, halfW, pairH);
 }
 
-function drawDateStamp(
+function drawStripText(
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
   canvasHeight: number,
-  date: Date
+  text: string
 ) {
-  const dateStr = date.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
   ctx.fillStyle = "#3D405B";
   ctx.font = "500 14px Nunito, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(dateStr, canvasWidth / 2, canvasHeight - DATE_BAR / 2 + 5);
+  ctx.textBaseline = "middle";
+
+  const maxWidth = canvasWidth - 32;
+  let displayText = text;
+  if (ctx.measureText(displayText).width > maxWidth) {
+    while (displayText.length > 0 && ctx.measureText(`${displayText}…`).width > maxWidth) {
+      displayText = displayText.slice(0, -1);
+    }
+    displayText = `${displayText}…`;
+  }
+
+  ctx.fillText(displayText, canvasWidth / 2, canvasHeight - DATE_BAR / 2);
 }
 
 function drawBorder(

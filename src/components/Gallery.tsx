@@ -76,9 +76,9 @@ export function Gallery({ sessions, onUpdate }: GalleryProps) {
         <Lightbox
           session={selected}
           onClose={() => setSelected(null)}
-          onUpdate={() => {
+          onUpdate={(close = true) => {
             onUpdate();
-            setSelected(null);
+            if (close) setSelected(null);
           }}
         />
       )}

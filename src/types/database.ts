@@ -29,6 +29,7 @@ export interface Session {
   layout: PhotoboothLayout;
   shot_index: number;
   combined_url: string | null;
+  strip_text: string | null;
   caption: string | null;
   favorited: boolean;
   initiated_by: string | null;

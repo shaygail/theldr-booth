@@ -4,48 +4,80 @@ import { useState } from "react";
 import type { Session } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import { downloadImage, photoboothFilename } from "@/lib/download-image";
+import { regenerateCombined } from "@/lib/regenerate-combined";
+import { resolveStripText } from "@/lib/strip-text";
 
 interface LightboxProps {
   session: Session;
   onClose: () => void;
-  onUpdate: () => void;
+  onUpdate: (close?: boolean) => void;
 }
 
 export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
   const [caption, setCaption] = useState(session.caption ?? "");
-  const [saving, setSaving] = useState(false);
+  const [stripText, setStripText] = useState(
+    resolveStripText(session.strip_text, session.created_at)
+  );
+  const [previewUrl, setPreviewUrl] = useState(
+    session.combined_url ?? session.photo_1_url
+  );
+  const [savingCaption, setSavingCaption] = useState(false);
+  const [savingStrip, setSavingStrip] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [stripError, setStripError] = useState<string | null>(null);
   const supabase = createClient();
 
-  const imageUrl = session.combined_url ?? session.photo_1_url;
+  const [lastSavedStrip, setLastSavedStrip] = useState(
+    resolveStripText(session.strip_text, session.created_at)
+  );
 
   const toggleFavorite = async () => {
     await supabase
       .from("sessions")
       .update({ favorited: !session.favorited })
       .eq("id", session.id);
-    onUpdate();
+    onUpdate(false);
   };
 
   const saveCaption = async () => {
-    setSaving(true);
+    setSavingCaption(true);
     await supabase
       .from("sessions")
       .update({ caption: caption.trim() || null })
       .eq("id", session.id);
-    setSaving(false);
-    onUpdate();
+    setSavingCaption(false);
+    onUpdate(false);
+  };
+
+  const saveStripText = async () => {
+    setSavingStrip(true);
+    setStripError(null);
+
+    try {
+      const publicUrl = await regenerateCombined(
+        session,
+        stripText.trim(),
+        supabase
+      );
+      setPreviewUrl(`${publicUrl}?t=${Date.now()}`);
+      setLastSavedStrip(stripText.trim());
+      onUpdate(false);
+    } catch {
+      setStripError("Could not update strip — try again.");
+    } finally {
+      setSavingStrip(false);
+    }
   };
 
   const handleDownload = async () => {
-    if (!imageUrl) return;
+    if (!previewUrl) return;
 
     setDownloading(true);
     setDownloadError(null);
 
     try {
-      await downloadImage(imageUrl, photoboothFilename(session.created_at));
+      await downloadImage(previewUrl, photoboothFilename(session.created_at));
     } catch {
       setDownloadError("Download failed — try again.");
     } finally {
@@ -62,10 +94,10 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
         className="bg-cream rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {imageUrl && (
+        {previewUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={imageUrl}
+            src={previewUrl}
             alt="Photobooth moment"
             className="w-full rounded-t-2xl"
           />
@@ -84,7 +116,7 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
           <div className="flex gap-2">
             <button
               onClick={handleDownload}
-              disabled={!imageUrl || downloading}
+              disabled={!previewUrl || downloading}
               className="btn-primary flex-1 text-sm py-2.5"
             >
               {downloading ? "Downloading…" : "Download"}
@@ -102,22 +134,58 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
             <p className="text-sm text-coral-600 text-center">{downloadError}</p>
           )}
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              placeholder="Add a caption…"
-              className="input flex-1 text-sm"
-              maxLength={200}
-            />
-            <button
-              onClick={saveCaption}
-              disabled={saving || caption === (session.caption ?? "")}
-              className="btn-secondary text-sm py-2 px-3"
-            >
-              Save
-            </button>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-warm-600 uppercase tracking-wide">
+              Strip text
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={stripText}
+                onChange={(e) => setStripText(e.target.value)}
+                placeholder="Text on your print…"
+                className="input flex-1 text-sm"
+                maxLength={80}
+              />
+              <button
+                onClick={saveStripText}
+                disabled={
+                  savingStrip ||
+                  stripText.trim() === lastSavedStrip.trim()
+                }
+                className="btn-secondary text-sm py-2 px-3 whitespace-nowrap"
+              >
+                {savingStrip ? "Updating…" : "Update print"}
+              </button>
+            </div>
+            {stripError && (
+              <p className="text-sm text-coral-600">{stripError}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-warm-600 uppercase tracking-wide">
+              Caption
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Private note for your timeline…"
+                className="input flex-1 text-sm"
+                maxLength={200}
+              />
+              <button
+                onClick={saveCaption}
+                disabled={
+                  savingCaption || caption === (session.caption ?? "")
+                }
+                className="btn-secondary text-sm py-2 px-3"
+              >
+                Save
+              </button>
+            </div>
           </div>
 
           <button onClick={onClose} className="btn-ghost w-full text-sm">

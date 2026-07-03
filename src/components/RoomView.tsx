@@ -10,6 +10,8 @@ import { SessionPrompt } from "@/components/SessionPrompt";
 import { Gallery } from "@/components/Gallery";
 import { DaysSince } from "@/components/DaysSince";
 import { LayoutPicker, layoutLabel, layoutPhotoCount } from "@/components/LayoutPicker";
+import { StripTextEditor } from "@/components/StripTextEditor";
+import { defaultStripText } from "@/lib/strip-text";
 import type { PhotoboothLayout } from "@/types/database";
 
 interface RoomViewProps {
@@ -23,6 +25,7 @@ export function RoomView({ room }: RoomViewProps) {
   const [dismissedPrompt, setDismissedPrompt] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [layout, setLayout] = useState<PhotoboothLayout>("single");
+  const [stripText, setStripText] = useState(() => defaultStripText());
   const [tab, setTab] = useState<"booth" | "gallery">("booth");
   const supabase = createClient();
 
@@ -59,6 +62,7 @@ export function RoomView({ room }: RoomViewProps) {
         initiated_by: user.id,
         status: "waiting",
         layout,
+        strip_text: stripText.trim() || defaultStripText(),
         shot_index: 0,
         photo_1_urls: [],
         photo_2_urls: [],
@@ -216,6 +220,7 @@ export function RoomView({ room }: RoomViewProps) {
                 Ready to capture a moment together, even from far away?
               </p>
               <LayoutPicker value={layout} onChange={setLayout} />
+              <StripTextEditor value={stripText} onChange={setStripText} />
               <button
                 onClick={startSession}
                 disabled={starting}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { combinePhotobooth } from "@/lib/combine-photos";
+import { resolveStripText } from "@/lib/strip-text";
 import { useWebcam } from "@/hooks/useWebcam";
 import { usePartnerVideo } from "@/hooks/usePartnerVideo";
 import type { Room, Session, PhotoFilter } from "@/types/database";
@@ -114,7 +115,8 @@ export function PhotoboothSession({
           photo2Url: urls2[i],
         }));
 
-        const combinedBlob = await combinePhotobooth(layout, shots);
+        const text = resolveStripText(session.strip_text, session.created_at);
+        const combinedBlob = await combinePhotobooth(layout, shots, text);
         const combinedPath = `${room.id}/${session.id}/combined.jpg`;
 
         const { error: uploadErr } = await supabase.storage
@@ -146,7 +148,7 @@ export function PhotoboothSession({
           .eq("id", session.id);
       }
     },
-    [layout, room.id, session.id, supabase]
+    [layout, room.id, session.id, session.strip_text, session.created_at, supabase]
   );
 
   const startCountdown = useCallback((shotIndex: number) => {
@@ -441,6 +443,11 @@ export function PhotoboothSession({
           {totalPhotos}
           {completedShots > 0 && ` · ${completedShots} saved`}
         </p>
+        {session.strip_text && (
+          <p className="text-xs text-warm-500 mt-1 italic truncate max-w-xs mx-auto">
+            &ldquo;{session.strip_text}&rdquo;
+          </p>
+        )}
       </div>
 
       <div className="relative w-full">
