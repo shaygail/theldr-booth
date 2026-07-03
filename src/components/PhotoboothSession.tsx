@@ -31,15 +31,15 @@ type Phase =
   | "done"
   | "error";
 
-function photoUrls(session: Session) {
-  const normalize = (value: unknown): string[] => {
-    if (Array.isArray(value)) return value as string[];
-    return [];
-  };
+function normalizeUrls(value: unknown): string[] {
+  if (Array.isArray(value)) return value as string[];
+  return [];
+}
 
+function photoUrls(session: Session) {
   return {
-    photos1: normalize(session.photo_1_urls),
-    photos2: normalize(session.photo_2_urls),
+    photos1: normalizeUrls(session.photo_1_urls),
+    photos2: normalizeUrls(session.photo_2_urls),
   };
 }
 
@@ -60,16 +60,12 @@ export function PhotoboothSession({
   const countdownStarted = useRef(false);
   const combining = useRef(false);
   const nextCountdownForShot = useRef(-1);
-  const shotIndexRef = useRef(session.shot_index);
+  const capturingShotIndexRef = useRef(0);
   const supabase = createClient();
 
   const layout = session.layout ?? "strip";
   const { photos1, photos2 } = photoUrls(session);
   const completedShots = Math.min(photos1.length, photos2.length);
-
-  useEffect(() => {
-    shotIndexRef.current = session.shot_index;
-  }, [session.shot_index]);
 
   const {
     videoRef,
@@ -83,14 +79,19 @@ export function PhotoboothSession({
     localStream,
   } = useWebcam({ filter });
 
+  const cameraPhases =
+    phase === "camera" ||
+    phase === "countdown" ||
+    phase === "capturing" ||
+    phase === "uploading" ||
+    phase === "between";
+
   const { partnerVideoRef, status: partnerStatus } = usePartnerVideo({
     sessionId: session.id,
     userId,
     isInitiator: isMember1,
     localStream,
-    enabled:
-      isActive &&
-      (phase === "camera" || phase === "countdown" || phase === "between"),
+    enabled: isActive && cameraPhases,
   });
 
   const isReady = isMember1
@@ -99,26 +100,7 @@ export function PhotoboothSession({
   const partnerReady = isMember1
     ? session.ready_member_2
     : session.ready_member_1;
-
   const bothReady = session.ready_member_1 && session.ready_member_2;
-
-  useEffect(() => {
-    if (
-      bothReady &&
-      isActive &&
-      phase === "camera" &&
-      !countdownStarted.current &&
-      !multiShotActive
-    ) {
-      countdownStarted.current = true;
-      setPhase("countdown");
-    }
-
-    if (!bothReady && countdownStarted.current && phase === "countdown") {
-      countdownStarted.current = false;
-      setPhase("camera");
-    }
-  }, [bothReady, isActive, phase, multiShotActive]);
 
   const tryCombineAndFinish = useCallback(
     async (urls1: string[], urls2: string[]) => {
@@ -166,14 +148,18 @@ export function PhotoboothSession({
     [layout, room.id, session.id, supabase]
   );
 
+  const startCountdown = useCallback((shotIndex: number) => {
+    capturingShotIndexRef.current = shotIndex;
+    countdownStarted.current = true;
+    setPhase("countdown");
+  }, []);
+
   useEffect(() => {
     if (photos1.length !== photos2.length) return;
 
     const done = photos1.length;
     if (done === 0 || done <= session.shot_index) return;
     if (done > PHOTOS_PER_SESSION) return;
-
-    shotIndexRef.current = done;
 
     supabase
       .from("sessions")
@@ -194,19 +180,43 @@ export function PhotoboothSession({
   ]);
 
   useEffect(() => {
+    if (
+      bothReady &&
+      isActive &&
+      phase === "camera" &&
+      !countdownStarted.current &&
+      !multiShotActive
+    ) {
+      startCountdown(completedShots);
+    }
+
+    if (!bothReady && countdownStarted.current && phase === "countdown") {
+      countdownStarted.current = false;
+      setPhase("camera");
+    }
+  }, [
+    bothReady,
+    isActive,
+    phase,
+    multiShotActive,
+    completedShots,
+    startCountdown,
+  ]);
+
+  useEffect(() => {
     if (!multiShotActive) return;
     if (!isActive) return;
     if (phase !== "camera") return;
     if (countdownStarted.current) return;
     if (completedShots >= PHOTOS_PER_SESSION) return;
     if (photos1.length !== photos2.length) return;
+    if (session.shot_index < completedShots) return;
     if (nextCountdownForShot.current >= completedShots) return;
 
     nextCountdownForShot.current = completedShots;
 
     const timer = setTimeout(() => {
-      countdownStarted.current = true;
-      setPhase("countdown");
+      startCountdown(completedShots);
     }, 2000);
 
     return () => clearTimeout(timer);
@@ -217,11 +227,76 @@ export function PhotoboothSession({
     completedShots,
     photos1.length,
     photos2.length,
+    session.shot_index,
+    startCountdown,
   ]);
 
   useEffect(() => {
     return () => stopCamera();
   }, [stopCamera]);
+
+  const captureWhenReady = useCallback(async (): Promise<Blob | null> => {
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const blob = capture();
+      if (blob) return blob;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
+  }, [capture]);
+
+  const uploadPhoto = useCallback(
+    async (blob: Blob, shotIndex: number) => {
+      const path = `${room.id}/${session.id}/photo_${isMember1 ? 1 : 2}_${shotIndex}.jpg`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("photos")
+        .upload(path, blob, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("photos").getPublicUrl(path);
+
+      const urlField = isMember1 ? "photo_1_urls" : "photo_2_urls";
+
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data: fresh } = await supabase
+          .from("sessions")
+          .select("photo_1_urls, photo_2_urls")
+          .eq("id", session.id)
+          .single();
+
+        const current = normalizeUrls(
+          isMember1 ? fresh?.photo_1_urls : fresh?.photo_2_urls
+        );
+
+        if (current.length > shotIndex) {
+          return current[shotIndex];
+        }
+
+        if (current.length < shotIndex) {
+          await new Promise((r) => setTimeout(r, 300));
+          continue;
+        }
+
+        const updated = [...current, publicUrl];
+        const { error } = await supabase
+          .from("sessions")
+          .update({ [urlField]: updated })
+          .eq("id", session.id);
+
+        if (!error) return publicUrl;
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
+      throw new Error("Failed to save photo URL");
+    },
+    [room.id, session.id, isMember1, supabase]
+  );
 
   const toggleReady = async () => {
     const field = isMember1 ? "ready_member_1" : "ready_member_2";
@@ -249,53 +324,17 @@ export function PhotoboothSession({
     await supabase.from("sessions").update(updates).eq("id", session.id);
   };
 
-  const uploadPhoto = useCallback(
-    async (blob: Blob, shotIndex: number) => {
-      const path = `${room.id}/${session.id}/photo_${isMember1 ? 1 : 2}_${shotIndex}.jpg`;
-
-      const { error: uploadErr } = await supabase.storage
-        .from("photos")
-        .upload(path, blob, {
-          contentType: "image/jpeg",
-          upsert: true,
-        });
-
-      if (uploadErr) throw uploadErr;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("photos").getPublicUrl(path);
-
-      const { data: fresh } = await supabase
-        .from("sessions")
-        .select("photo_1_urls, photo_2_urls")
-        .eq("id", session.id)
-        .single();
-
-      const urlField = isMember1 ? "photo_1_urls" : "photo_2_urls";
-      const current = isMember1
-        ? (fresh?.photo_1_urls ?? [])
-        : (fresh?.photo_2_urls ?? []);
-      const updated = [...current, publicUrl];
-
-      await supabase
-        .from("sessions")
-        .update({ [urlField]: updated })
-        .eq("id", session.id);
-
-      return publicUrl;
-    },
-    [room.id, session.id, isMember1, supabase]
-  );
-
   const handleCountdownComplete = async () => {
+    const shotIndex = capturingShotIndexRef.current;
     setPhase("capturing");
 
-    const blob = capture();
+    const blob = await captureWhenReady();
 
     if (!blob) {
       stopCamera();
-      setUploadError("Failed to capture photo. Please try again.");
+      setUploadError(
+        `Failed to capture photo ${shotIndex + 1}. Please try again.`
+      );
       setPhase("error");
       return;
     }
@@ -303,7 +342,6 @@ export function PhotoboothSession({
     setPhase("uploading");
 
     try {
-      const shotIndex = shotIndexRef.current;
       await uploadPhoto(blob, shotIndex);
 
       const moreShots = shotIndex + 1 < PHOTOS_PER_SESSION;
@@ -340,7 +378,7 @@ export function PhotoboothSession({
     } catch {
       stopCamera();
       setUploadError(
-        "Upload failed — check your connection and try again."
+        `Upload failed for photo ${shotIndex + 1} — check your connection and try again.`
       );
       setPhase("error");
     }
@@ -358,31 +396,6 @@ export function PhotoboothSession({
       .eq("id", session.id);
     onCancel();
   };
-
-  if (phase === "uploading" || phase === "capturing") {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <div className="w-12 h-12 border-4 border-coral-200 border-t-coral-500 rounded-full animate-spin" />
-        <p className="text-warm-600">
-          {phase === "capturing"
-            ? "Smile! 📸"
-            : `Saving photo ${shotIndexRef.current + 1} of ${PHOTOS_PER_SESSION}…`}
-        </p>
-      </div>
-    );
-  }
-
-  if (phase === "between") {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <span className="text-4xl">✨</span>
-        <p className="text-lg font-semibold text-warm-800">
-          Nice! {betweenShot} of {PHOTOS_PER_SESSION}
-        </p>
-        <p className="text-sm text-warm-600">Get ready for the next one…</p>
-      </div>
-    );
-  }
 
   if (phase === "done") {
     return (
@@ -406,6 +419,15 @@ export function PhotoboothSession({
     );
   }
 
+  const overlayMessage =
+    phase === "capturing"
+      ? "Smile! 📸"
+      : phase === "uploading"
+        ? `Saving photo ${capturingShotIndexRef.current + 1} of ${PHOTOS_PER_SESSION}…`
+        : phase === "between"
+          ? `Nice! ${betweenShot} of ${PHOTOS_PER_SESSION} — get ready…`
+          : null;
+
   return (
     <div className="flex flex-col items-center gap-6 w-full">
       <div className="text-center">
@@ -413,24 +435,40 @@ export function PhotoboothSession({
           {layoutLabel(layout)}
         </p>
         <p className="text-sm text-warm-600 mt-0.5">
-          Photo {session.shot_index + 1} of {PHOTOS_PER_SESSION}
+          Photo {Math.max(session.shot_index, completedShots) + 1} of{" "}
+          {PHOTOS_PER_SESSION}
           {completedShots > 0 && ` · ${completedShots} saved`}
         </p>
       </div>
 
-      <DualCameraView
-        localVideoRef={videoRef}
-        partnerVideoRef={partnerVideoRef}
-        canvasRef={canvasRef}
-        state={webcamState}
-        error={webcamError}
-        filter={filter}
-        partnerName={partnerName}
-        partnerStatus={partnerStatus}
-        onFilterChange={setFilter}
-        onStart={startCamera}
-        onRetry={startCamera}
-      />
+      <div className="relative w-full">
+        <DualCameraView
+          localVideoRef={videoRef}
+          partnerVideoRef={partnerVideoRef}
+          canvasRef={canvasRef}
+          state={webcamState}
+          error={webcamError}
+          filter={filter}
+          partnerName={partnerName}
+          partnerStatus={partnerStatus}
+          onFilterChange={setFilter}
+          onStart={startCamera}
+          onRetry={startCamera}
+        />
+
+        {overlayMessage && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-2xl bg-warm-900/50 backdrop-blur-sm">
+            {phase === "uploading" || phase === "capturing" ? (
+              <div className="w-12 h-12 border-4 border-coral-200 border-t-coral-500 rounded-full animate-spin mb-3" />
+            ) : (
+              <span className="text-4xl mb-2">✨</span>
+            )}
+            <p className="text-cream font-medium text-center px-4">
+              {overlayMessage}
+            </p>
+          </div>
+        )}
+      </div>
 
       {isActive && phase === "camera" && !multiShotActive && (
         <ReadyToggle
