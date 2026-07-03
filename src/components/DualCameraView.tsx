@@ -32,6 +32,7 @@ function CameraPane({
   videoRef,
   outputRef,
   showProcessed,
+  virtualBgActive,
   label,
   mirrored = false,
   overlay,
@@ -39,6 +40,7 @@ function CameraPane({
   videoRef: React.RefObject<HTMLVideoElement | null>;
   outputRef?: React.RefObject<HTMLCanvasElement | null>;
   showProcessed: boolean;
+  virtualBgActive: boolean;
   label: string;
   mirrored?: boolean;
   overlay?: React.ReactNode;
@@ -50,17 +52,16 @@ function CameraPane({
         autoPlay
         playsInline
         muted
-        className={`absolute inset-0 w-full h-full object-cover z-0 ${
+        className={`absolute inset-0 w-full h-full object-cover ${
           mirrored ? "scale-x-[-1]" : ""
-        } ${showProcessed ? "opacity-0" : "opacity-100"}`}
+        } ${showProcessed ? "invisible" : "visible"}`}
       />
-      {outputRef && (
+      {virtualBgActive && outputRef && (
         <canvas
           ref={outputRef}
-          className={`absolute inset-0 w-full h-full z-[1] ${
-            showProcessed ? "opacity-100" : "opacity-0 pointer-events-none"
+          className={`absolute inset-0 w-full h-full ${
+            showProcessed ? "visible" : "invisible"
           }`}
-          style={{ objectFit: "cover" }}
         />
       )}
       {overlay}
@@ -93,6 +94,10 @@ export function DualCameraView({
 }: DualCameraViewProps) {
   const cameraActive = state === "active";
   const vbSupported = supportsVirtualBackground();
+  const localVirtualActive =
+    vbSupported && cameraActive && background !== "none";
+  const partnerVirtualActive =
+    vbSupported && partnerStatus === "connected" && background !== "none";
 
   const localOverlay = !cameraActive ? (
     <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center bg-warm-200 p-4 text-center">
@@ -156,6 +161,7 @@ export function DualCameraView({
             videoRef={localVideoRef}
             outputRef={localOutputRef}
             showProcessed={localShowProcessed}
+            virtualBgActive={localVirtualActive}
             label="You"
             mirrored
             overlay={localOverlay}
@@ -164,6 +170,7 @@ export function DualCameraView({
             videoRef={partnerVideoRef}
             outputRef={partnerOutputRef}
             showProcessed={partnerShowProcessed}
+            virtualBgActive={partnerVirtualActive}
             label={partnerName}
             overlay={partnerOverlay}
           />

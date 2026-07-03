@@ -52,6 +52,8 @@ export async function preloadSegmentationModel() {
   return true;
 }
 
+let scratchCanvas: HTMLCanvasElement | null = null;
+
 export async function renderWithBackground(
   video: HTMLVideoElement,
   output: HTMLCanvasElement,
@@ -70,8 +72,15 @@ export async function renderWithBackground(
   const net = await getModel();
   if (!bodyPixModule || !backendReady) return false;
 
-  output.width = w;
-  output.height = h;
+  if (!scratchCanvas) scratchCanvas = document.createElement("canvas");
+  if (scratchCanvas.width !== w || scratchCanvas.height !== h) {
+    scratchCanvas.width = w;
+    scratchCanvas.height = h;
+  }
+  if (output.width !== w || output.height !== h) {
+    output.width = w;
+    output.height = h;
+  }
 
   const segmentation = await net.segmentPerson(video, {
     flipHorizontal: mirrored,
@@ -79,11 +88,14 @@ export async function renderWithBackground(
     segmentationThreshold: 0.7,
   });
 
-  const ctx = output.getContext("2d")!;
-  ctx.drawImage(bg, 0, 0, w, h);
+  const scratchCtx = scratchCanvas.getContext("2d")!;
+  scratchCtx.drawImage(bg, 0, 0, w, h);
 
   const mask = bodyPixModule.toMask(segmentation);
-  bodyPixModule.drawMask(output, video, mask, 1, 4, mirrored);
+  bodyPixModule.drawMask(scratchCanvas, video, mask, 1, 8, mirrored);
+
+  const ctx = output.getContext("2d")!;
+  ctx.drawImage(scratchCanvas, 0, 0);
 
   return true;
 }
