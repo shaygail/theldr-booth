@@ -95,7 +95,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
   const capture = useCallback((): Blob | null => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || state !== "active") return null;
+    if (!video || !canvas || !streamRef.current) return null;
 
     const width = video.videoWidth;
     const height = video.videoHeight;
@@ -124,7 +124,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
       ia[i] = byteString.charCodeAt(i);
     }
     return new Blob([ab], { type: mimeString });
-  }, [state, filter, mirrored]);
+  }, [filter, mirrored]);
 
   useEffect(() => {
     return () => {

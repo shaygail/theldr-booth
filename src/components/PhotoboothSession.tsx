@@ -171,9 +171,10 @@ export function PhotoboothSession({
 
   const handleCountdownComplete = async () => {
     setPhase("capturing");
-    stopCamera();
 
     const blob = capture();
+    stopCamera();
+
     if (!blob) {
       setUploadError("Failed to capture photo. Please try again.");
       setPhase("error");
@@ -256,10 +257,6 @@ export function PhotoboothSession({
     onCancel();
   };
 
-  if (phase === "countdown") {
-    return <CountdownTimer onComplete={handleCountdownComplete} />;
-  }
-
   if (phase === "uploading" || phase === "capturing") {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -306,7 +303,7 @@ export function PhotoboothSession({
         onRetry={startCamera}
       />
 
-      {isActive && (
+      {isActive && phase === "camera" && (
         <ReadyToggle
           isReady={isReady}
           partnerReady={partnerReady}
@@ -316,9 +313,15 @@ export function PhotoboothSession({
         />
       )}
 
-      <button onClick={handleCancel} className="btn-ghost text-sm">
-        Cancel session
-      </button>
+      {phase === "camera" && (
+        <button onClick={handleCancel} className="btn-ghost text-sm">
+          Cancel session
+        </button>
+      )}
+
+      {phase === "countdown" && (
+        <CountdownTimer onComplete={handleCountdownComplete} />
+      )}
     </div>
   );
 }
