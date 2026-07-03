@@ -2,30 +2,41 @@
 
 import type { PhotoFilter } from "@/types/database";
 import { FILTER_OPTIONS } from "@/lib/filters";
+import { BACKGROUND_OPTIONS, type BackgroundId } from "@/lib/backgrounds";
 import type { WebcamState } from "@/hooks/useWebcam";
 import type { PartnerVideoStatus } from "@/hooks/usePartnerVideo";
 
 interface DualCameraViewProps {
   localVideoRef: React.RefObject<HTMLVideoElement | null>;
   partnerVideoRef: React.RefObject<HTMLVideoElement | null>;
+  localOutputRef: React.RefObject<HTMLCanvasElement | null>;
+  partnerOutputRef: React.RefObject<HTMLCanvasElement | null>;
+  useVirtualBackground: boolean;
+  backgroundLoading: boolean;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   state: WebcamState;
   error: string | null;
   filter: PhotoFilter;
+  background: BackgroundId;
   partnerName: string;
   partnerStatus: PartnerVideoStatus;
   onFilterChange: (filter: PhotoFilter) => void;
+  onBackgroundChange: (background: BackgroundId) => void;
   onStart: () => void;
   onRetry: () => void;
 }
 
 function CameraPane({
   videoRef,
+  outputRef,
+  useProcessed,
   label,
   mirrored = false,
   overlay,
 }: {
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  outputRef?: React.RefObject<HTMLCanvasElement | null>;
+  useProcessed: boolean;
   label: string;
   mirrored?: boolean;
   overlay?: React.ReactNode;
@@ -37,10 +48,22 @@ function CameraPane({
         autoPlay
         playsInline
         muted
-        className={`absolute inset-0 w-full h-full object-cover ${
-          mirrored ? "scale-x-[-1]" : ""
-        }`}
+        className={
+          useProcessed
+            ? "sr-only"
+            : `absolute inset-0 w-full h-full object-cover ${
+                mirrored ? "scale-x-[-1]" : ""
+              }`
+        }
       />
+      {outputRef && (
+        <canvas
+          ref={outputRef}
+          className={`absolute inset-0 w-full h-full object-cover ${
+            useProcessed ? "block" : "hidden"
+          }`}
+        />
+      )}
       {overlay}
       <span className="absolute bottom-2 left-2 z-10 text-xs font-semibold text-white bg-warm-900/50 px-2 py-0.5 rounded-full backdrop-blur-sm">
         {label}
@@ -52,17 +75,26 @@ function CameraPane({
 export function DualCameraView({
   localVideoRef,
   partnerVideoRef,
+  localOutputRef,
+  partnerOutputRef,
+  useVirtualBackground,
+  backgroundLoading,
   canvasRef,
   state,
   error,
   filter,
+  background,
   partnerName,
   partnerStatus,
   onFilterChange,
+  onBackgroundChange,
   onStart,
   onRetry,
 }: DualCameraViewProps) {
   const cameraActive = state === "active";
+  const showProcessed = useVirtualBackground && cameraActive;
+  const showPartnerProcessed =
+    useVirtualBackground && partnerStatus === "connected";
 
   const localOverlay = !cameraActive ? (
     <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center bg-warm-200 p-4 text-center">
@@ -115,16 +147,25 @@ export function DualCameraView({
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
+      {backgroundLoading && useVirtualBackground && (
+        <p className="text-xs text-warm-600 animate-pulse">
+          Loading virtual backgrounds…
+        </p>
+      )}
       <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-xl border border-gold-200">
         <div className="flex divide-x-2 divide-coral-500/30">
           <CameraPane
             videoRef={localVideoRef}
+            outputRef={localOutputRef}
+            useProcessed={showProcessed}
             label="You"
             mirrored
             overlay={localOverlay}
           />
           <CameraPane
             videoRef={partnerVideoRef}
+            outputRef={partnerOutputRef}
+            useProcessed={showPartnerProcessed}
             label={partnerName}
             overlay={partnerOverlay}
           />
@@ -133,21 +174,44 @@ export function DualCameraView({
       </div>
 
       {cameraActive && (
-        <div className="flex gap-2 flex-wrap justify-center">
-          {FILTER_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => onFilterChange(opt.value)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filter === opt.value
-                  ? "bg-coral-500 text-white"
-                  : "bg-warm-200 text-warm-700 hover:bg-warm-300"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="flex gap-2 flex-wrap justify-center">
+            <span className="text-xs text-warm-500 w-full text-center mb-0.5">
+              Scene
+            </span>
+            {BACKGROUND_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => onBackgroundChange(opt.id)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  background === opt.id
+                    ? "bg-sage-500 text-white"
+                    : "bg-warm-200 text-warm-700 hover:bg-warm-300"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 flex-wrap justify-center">
+            <span className="text-xs text-warm-500 w-full text-center mb-0.5">
+              Filter
+            </span>
+            {FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onFilterChange(opt.value)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  filter === opt.value
+                    ? "bg-coral-500 text-white"
+                    : "bg-warm-200 text-warm-700 hover:bg-warm-300"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
