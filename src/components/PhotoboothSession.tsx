@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { combinePhotos } from "@/lib/combine-photos";
 import { captureFromCanvas } from "@/lib/segmentation";
 import type { BackgroundId } from "@/lib/backgrounds";
+import { composeVideoOnBackground } from "@/lib/backgrounds";
 import { isIOS } from "@/lib/device";
 import { useWebcam } from "@/hooks/useWebcam";
 import { usePartnerVideo } from "@/hooks/usePartnerVideo";
@@ -36,9 +37,7 @@ export function PhotoboothSession({
   onCancel,
 }: PhotoboothSessionProps) {
   const [filter, setFilter] = useState<PhotoFilter>("none");
-  const [background, setBackground] = useState<BackgroundId>(() =>
-    typeof window !== "undefined" && isIOS() ? "none" : "cozy-booth"
-  );
+  const [background, setBackground] = useState<BackgroundId>("cozy-booth");
   const [phase, setPhase] = useState<Phase>("camera");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const countdownStarted = useRef(false);
@@ -212,6 +211,18 @@ export function PhotoboothSession({
       localBg.outputRef.current.width > 0
     ) {
       blob = captureFromCanvas(localBg.outputRef.current, filter);
+    } else if (
+      background !== "none" &&
+      isIOS() &&
+      videoRef.current &&
+      videoRef.current.videoWidth > 0
+    ) {
+      const composed = composeVideoOnBackground(
+        videoRef.current,
+        background,
+        true
+      );
+      blob = composed ? captureFromCanvas(composed, filter) : capture();
     } else {
       blob = capture();
     }

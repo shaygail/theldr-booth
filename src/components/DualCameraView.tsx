@@ -2,8 +2,12 @@
 
 import type { PhotoFilter } from "@/types/database";
 import { FILTER_OPTIONS } from "@/lib/filters";
-import { BACKGROUND_OPTIONS, type BackgroundId } from "@/lib/backgrounds";
-import { supportsVirtualBackground } from "@/lib/device";
+import {
+  BACKGROUND_OPTIONS,
+  getBackgroundCSS,
+  type BackgroundId,
+} from "@/lib/backgrounds";
+import { supportsAISegmentation } from "@/lib/device";
 import type { WebcamState } from "@/hooks/useWebcam";
 import type { PartnerVideoStatus } from "@/hooks/usePartnerVideo";
 
@@ -32,7 +36,9 @@ function CameraPane({
   videoRef,
   outputRef,
   showProcessed,
-  virtualBgActive,
+  sceneBackdrop,
+  sceneStyle,
+  useAIOutput,
   label,
   mirrored = false,
   overlay,
@@ -40,23 +46,34 @@ function CameraPane({
   videoRef: React.RefObject<HTMLVideoElement | null>;
   outputRef?: React.RefObject<HTMLCanvasElement | null>;
   showProcessed: boolean;
-  virtualBgActive: boolean;
+  sceneBackdrop: boolean;
+  sceneStyle?: string;
+  useAIOutput: boolean;
   label: string;
   mirrored?: boolean;
   overlay?: React.ReactNode;
 }) {
+  const insetVideo = sceneBackdrop && !showProcessed;
+
   return (
-    <div className="relative flex-1 min-w-0 aspect-[3/4] bg-warm-300 overflow-hidden">
+    <div
+      className="relative flex-1 min-w-0 aspect-[3/4] overflow-hidden"
+      style={{ background: sceneStyle ?? "#e8ddd0" }}
+    >
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className={`absolute inset-0 w-full h-full object-cover ${
+        className={`absolute object-cover ${
           mirrored ? "scale-x-[-1]" : ""
-        } ${showProcessed ? "invisible" : "visible"}`}
+        } ${showProcessed ? "invisible" : "visible"} ${
+          insetVideo
+            ? "inset-2 rounded-xl border-2 border-white/25 shadow-md"
+            : "inset-0 w-full h-full"
+        }`}
       />
-      {virtualBgActive && outputRef && (
+      {useAIOutput && outputRef && (
         <canvas
           ref={outputRef}
           className={`absolute inset-0 w-full h-full ${
@@ -93,14 +110,16 @@ export function DualCameraView({
   onRetry,
 }: DualCameraViewProps) {
   const cameraActive = state === "active";
-  const vbSupported = supportsVirtualBackground();
-  const localVirtualActive =
-    vbSupported && cameraActive && background !== "none";
-  const partnerVirtualActive =
-    vbSupported && partnerStatus === "connected" && background !== "none";
+  const aiScenes = supportsAISegmentation();
+  const hasScene = background !== "none";
+  const sceneStyle = hasScene ? getBackgroundCSS(background) : undefined;
+
+  const localSceneBackdrop = hasScene && cameraActive && !localShowProcessed;
+  const partnerSceneBackdrop =
+    hasScene && partnerStatus === "connected" && !partnerShowProcessed;
 
   const localOverlay = !cameraActive ? (
-    <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center bg-warm-200 p-4 text-center">
+    <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center bg-warm-200/90 p-4 text-center">
       {state === "idle" && (
         <>
           <span className="text-3xl mb-2">📷</span>
@@ -132,7 +151,7 @@ export function DualCameraView({
 
   const partnerOverlay =
     partnerStatus !== "connected" ? (
-      <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center bg-warm-200 p-3 text-center">
+      <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center bg-warm-200/90 p-3 text-center">
         {!cameraActive ? (
           <p className="text-xs text-warm-500">{partnerName}</p>
         ) : (
@@ -150,7 +169,7 @@ export function DualCameraView({
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-      {backgroundLoading && background !== "none" && vbSupported && (
+      {backgroundLoading && hasScene && aiScenes && (
         <p className="text-xs text-warm-600 animate-pulse">
           Loading virtual backgrounds…
         </p>
@@ -161,7 +180,9 @@ export function DualCameraView({
             videoRef={localVideoRef}
             outputRef={localOutputRef}
             showProcessed={localShowProcessed}
-            virtualBgActive={localVirtualActive}
+            sceneBackdrop={localSceneBackdrop}
+            sceneStyle={sceneStyle}
+            useAIOutput={aiScenes && hasScene}
             label="You"
             mirrored
             overlay={localOverlay}
@@ -170,7 +191,9 @@ export function DualCameraView({
             videoRef={partnerVideoRef}
             outputRef={partnerOutputRef}
             showProcessed={partnerShowProcessed}
-            virtualBgActive={partnerVirtualActive}
+            sceneBackdrop={partnerSceneBackdrop}
+            sceneStyle={sceneStyle}
+            useAIOutput={aiScenes && hasScene}
             label={partnerName}
             overlay={partnerOverlay}
           />
@@ -180,31 +203,27 @@ export function DualCameraView({
 
       {cameraActive && (
         <>
-          {vbSupported ? (
-            <div className="flex gap-2 flex-wrap justify-center">
-              <span className="text-xs text-warm-500 w-full text-center mb-0.5">
-                Scene
-              </span>
-              {BACKGROUND_OPTIONS.map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => onBackgroundChange(opt.id)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    background === opt.id
-                      ? "bg-sage-500 text-white"
-                      : "bg-warm-200 text-warm-700 hover:bg-warm-300"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-warm-500 text-center px-4">
-              Virtual scenes work best on desktop — your camera shows normally on
-              iPad.
-            </p>
-          )}
+          <div className="flex gap-2 flex-wrap justify-center">
+            <span className="text-xs text-warm-500 w-full text-center mb-0.5">
+              Scene
+              {!aiScenes && hasScene && (
+                <span className="text-warm-400"> · backdrop mode on iPad</span>
+              )}
+            </span>
+            {BACKGROUND_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => onBackgroundChange(opt.id)}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  background === opt.id
+                    ? "bg-sage-500 text-white"
+                    : "bg-warm-200 text-warm-700 hover:bg-warm-300"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <div className="flex gap-2 flex-wrap justify-center">
             <span className="text-xs text-warm-500 w-full text-center mb-0.5">
               Filter

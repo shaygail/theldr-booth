@@ -1,6 +1,6 @@
 import type { PhotoFilter } from "@/types/database";
 import { applyFilter } from "@/lib/filters";
-import { supportsVirtualBackground } from "@/lib/device";
+import { supportsAISegmentation } from "@/lib/device";
 import type * as bodyPixType from "@tensorflow-models/body-pix";
 import type { BackgroundId } from "@/lib/backgrounds";
 import { getBackgroundCanvas } from "@/lib/backgrounds";
@@ -28,7 +28,7 @@ async function initBackend() {
 }
 
 async function getModel() {
-  if (!supportsVirtualBackground()) {
+  if (!supportsAISegmentation()) {
     throw new Error("Virtual background not supported on this device");
   }
   if (!netPromise) {
@@ -47,7 +47,7 @@ async function getModel() {
 }
 
 export async function preloadSegmentationModel() {
-  if (!supportsVirtualBackground()) return false;
+  if (!supportsAISegmentation()) return false;
   await getModel();
   return true;
 }
@@ -60,7 +60,7 @@ export async function renderWithBackground(
   backgroundId: BackgroundId,
   mirrored: boolean
 ): Promise<boolean> {
-  if (backgroundId === "none" || !supportsVirtualBackground()) return false;
+  if (backgroundId === "none" || !supportsAISegmentation()) return false;
 
   const bg = getBackgroundCanvas(backgroundId);
   if (!bg) return false;
@@ -88,13 +88,16 @@ export async function renderWithBackground(
     segmentationThreshold: 0.7,
   });
 
-  const scratchCtx = scratchCanvas.getContext("2d")!;
-  scratchCtx.drawImage(bg, 0, 0, w, h);
-
   const mask = bodyPixModule.toMask(segmentation);
+
+  // 1. Background on output canvas
+  const ctx = output.getContext("2d")!;
+  ctx.drawImage(bg, 0, 0, w, h);
+
+  // 2. Person cutout on scratch (transparent elsewhere)
   bodyPixModule.drawMask(scratchCanvas, video, mask, 1, 8, mirrored);
 
-  const ctx = output.getContext("2d")!;
+  // 3. Composite person onto background
   ctx.drawImage(scratchCanvas, 0, 0);
 
   return true;

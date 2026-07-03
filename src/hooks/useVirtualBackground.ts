@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { BackgroundId } from "@/lib/backgrounds";
-import { supportsVirtualBackground } from "@/lib/device";
+import { supportsAISegmentation } from "@/lib/device";
 import {
   preloadSegmentationModel,
   renderWithBackground,
@@ -26,7 +26,7 @@ export function useVirtualBackground({
   const renderingRef = useRef(false);
   const [modelLoading, setModelLoading] = useState(false);
   const [hasFrame, setHasFrame] = useState(false);
-  const [supported] = useState(supportsVirtualBackground());
+  const [supported] = useState(supportsAISegmentation());
 
   const active = supported && enabled && backgroundId !== "none";
 

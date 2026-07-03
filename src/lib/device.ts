@@ -6,8 +6,13 @@ export function isIOS(): boolean {
   );
 }
 
-export function supportsVirtualBackground(): boolean {
+/** AI cutout backgrounds (body-pix) — desktop only */
+export function supportsAISegmentation(): boolean {
   if (typeof window === "undefined") return false;
-  // TensorFlow body-pix is unreliable on iOS Safari — use raw camera instead
   return !isIOS();
+}
+
+/** @deprecated use supportsAISegmentation */
+export function supportsVirtualBackground(): boolean {
+  return supportsAISegmentation();
 }

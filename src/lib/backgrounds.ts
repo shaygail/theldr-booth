@@ -104,3 +104,56 @@ export function getBackgroundCanvas(id: BackgroundId): HTMLCanvasElement | null 
   }
   return cache.get(id)!;
 }
+
+/** CSS gradient backdrops for iPad (no AI segmentation) */
+export function getBackgroundCSS(id: BackgroundId): string | undefined {
+  switch (id) {
+    case "cozy-booth":
+      return "linear-gradient(180deg, #f5ebe0 0%, #e8d5c4 50%, #d4a574 100%)";
+    case "sunset":
+      return "linear-gradient(180deg, #6b4c6e 0%, #c96a52 35%, #e07a5f 65%, #f2cc8f 100%)";
+    case "starry":
+      return "linear-gradient(180deg, #1a1a2e 0%, #2d3142 100%)";
+    case "cafe":
+      return "linear-gradient(135deg, #3d405b 0%, #5c4a3a 50%, #8b6914 100%)";
+    default:
+      return undefined;
+  }
+}
+
+/** Compose a photo with scene backdrop (used on iPad at capture time) */
+export function composeVideoOnBackground(
+  video: HTMLVideoElement,
+  backgroundId: BackgroundId,
+  mirrored: boolean
+): HTMLCanvasElement | null {
+  const bg = getBackgroundCanvas(backgroundId);
+  if (!bg) return null;
+
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (!w || !h) return null;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.drawImage(bg, 0, 0, w, h);
+
+  const pad = Math.round(w * 0.04);
+  const vw = w - pad * 2;
+  const vh = h - pad * 2;
+
+  ctx.save();
+  if (mirrored) {
+    ctx.translate(pad + vw, pad);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, vw, vh);
+  } else {
+    ctx.drawImage(video, pad, pad, vw, vh);
+  }
+  ctx.restore();
+
+  return canvas;
+}
