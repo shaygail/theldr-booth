@@ -29,6 +29,10 @@ export function useWebcam(options: UseWebcamOptions = {}) {
     setError(null);
 
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera not supported in this browser");
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "user",
@@ -40,22 +44,44 @@ export function useWebcam(options: UseWebcamOptions = {}) {
 
       streamRef.current = stream;
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      const video = videoRef.current;
+      if (video) {
+        video.srcObject = stream;
+        await video.play();
       }
 
       setState("active");
     } catch (err) {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+
       const message =
         err instanceof DOMException && err.name === "NotAllowedError"
           ? "Camera access was denied. Please allow camera permissions in your browser settings."
-          : "Could not access your camera. Please check your device and try again.";
+          : err instanceof DOMException && err.name === "NotFoundError"
+            ? "No camera found on this device."
+            : "Could not access your camera. Tap Open camera and allow permission when prompted.";
 
       setError(message);
-      setState(err instanceof DOMException && err.name === "NotAllowedError" ? "denied" : "error");
+      setState(
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "denied"
+          : "error"
+      );
     }
   }, []);
+
+  // Attach stream when video element mounts (ref may be null during first start)
+  useEffect(() => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (state !== "active" || !video || !stream) return;
+
+    if (video.srcObject !== stream) {
+      video.srcObject = stream;
+      video.play().catch(() => {});
+    }
+  }, [state]);
 
   const stop = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -73,6 +99,7 @@ export function useWebcam(options: UseWebcamOptions = {}) {
 
     const width = video.videoWidth;
     const height = video.videoHeight;
+    if (!width || !height) return null;
     canvas.width = width;
     canvas.height = height;
 

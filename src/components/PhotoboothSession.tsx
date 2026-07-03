@@ -57,11 +57,6 @@ export function PhotoboothSession({
   const bothReady = session.ready_member_1 && session.ready_member_2;
 
   useEffect(() => {
-    startCamera();
-    return () => stopCamera();
-  }, [startCamera, stopCamera]);
-
-  useEffect(() => {
     if (
       bothReady &&
       isActive &&
@@ -77,6 +72,10 @@ export function PhotoboothSession({
       setPhase("camera");
     }
   }, [bothReady, isActive, phase]);
+
+  useEffect(() => {
+    return () => stopCamera();
+  }, [stopCamera]);
 
   const toggleReady = async () => {
     const field = isMember1 ? "ready_member_1" : "ready_member_2";
