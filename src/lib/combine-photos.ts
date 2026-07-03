@@ -123,7 +123,7 @@ function drawStripText(
   text: string
 ) {
   ctx.fillStyle = "#3D405B";
-  ctx.font = "500 14px Nunito, sans-serif";
+  ctx.font = "600 14px system-ui, -apple-system, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 

@@ -1,31 +1,23 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { combinePhotobooth } from "@/lib/combine-photos";
 import { resolveStripText } from "@/lib/strip-text";
+import { getSessionShots } from "@/lib/session-shots";
 import type { Session } from "@/types/database";
-
-function normalizeUrls(value: unknown): string[] {
-  if (Array.isArray(value)) return value as string[];
-  return [];
-}
 
 export async function regenerateCombined(
   session: Session,
   stripText: string,
   supabase: SupabaseClient
 ): Promise<string> {
-  const urls1 = normalizeUrls(session.photo_1_urls);
-  const urls2 = normalizeUrls(session.photo_2_urls);
+  const shots = getSessionShots(session);
 
-  if (urls1.length === 0 || urls1.length !== urls2.length) {
-    throw new Error("Missing photos for this session");
+  if (shots.length === 0) {
+    throw new Error(
+      "Original photos are not available for this session. Take a new photobooth session to edit the strip text."
+    );
   }
 
   const layout = session.layout ?? "single";
-  const shots = urls1.map((photo1Url, i) => ({
-    photo1Url,
-    photo2Url: urls2[i],
-  }));
-
   const text = resolveStripText(stripText, session.created_at);
   const combinedBlob = await combinePhotobooth(layout, shots, text);
   const combinedPath = `${session.room_id}/${session.id}/combined.jpg`;
@@ -51,7 +43,17 @@ export async function regenerateCombined(
     })
     .eq("id", session.id);
 
-  if (updateErr) throw updateErr;
+  if (updateErr) {
+    if (updateErr.message.includes("strip_text")) {
+      const { error: fallbackErr } = await supabase
+        .from("sessions")
+        .update({ combined_url: publicUrl })
+        .eq("id", session.id);
+      if (fallbackErr) throw fallbackErr;
+    } else {
+      throw updateErr;
+    }
+  }
 
   return publicUrl;
 }

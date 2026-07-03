@@ -24,6 +24,7 @@ export function RoomView({ room }: RoomViewProps) {
   const [inSession, setInSession] = useState(false);
   const [dismissedPrompt, setDismissedPrompt] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [layout, setLayout] = useState<PhotoboothLayout>("single");
   const [stripText, setStripText] = useState(() => defaultStripText());
   const [tab, setTab] = useState<"booth" | "gallery">("booth");
@@ -54,6 +55,7 @@ export function RoomView({ room }: RoomViewProps) {
   const startSession = async () => {
     if (!partnerConnected) return;
     setStarting(true);
+    setStartError(null);
 
     const { data, error } = await supabase
       .from("sessions")
@@ -70,7 +72,16 @@ export function RoomView({ room }: RoomViewProps) {
       .select()
       .single();
 
-    if (!error && data) {
+    if (error) {
+      setStartError(
+        error.message.includes("strip_text") ||
+          error.message.includes("layout") ||
+          error.message.includes("photo_1_urls")
+          ? "Database needs updating — run the latest Supabase migrations."
+          : "Could not start session. Please try again."
+      );
+    } else if (data) {
+      await refetch();
       setInSession(true);
       setTab("booth");
     }
@@ -221,6 +232,11 @@ export function RoomView({ room }: RoomViewProps) {
               </p>
               <LayoutPicker value={layout} onChange={setLayout} />
               <StripTextEditor value={stripText} onChange={setStripText} />
+              {startError && (
+                <p className="text-sm text-coral-600 text-center max-w-xs">
+                  {startError}
+                </p>
+              )}
               <button
                 onClick={startSession}
                 disabled={starting}

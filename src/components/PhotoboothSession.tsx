@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { combinePhotobooth } from "@/lib/combine-photos";
-import { resolveStripText } from "@/lib/strip-text";
+import { resolveStripText, defaultStripText } from "@/lib/strip-text";
+import { normalizeUrls } from "@/lib/session-shots";
 import { useWebcam } from "@/hooks/useWebcam";
 import { usePartnerVideo } from "@/hooks/usePartnerVideo";
 import type { Room, Session, PhotoFilter } from "@/types/database";
@@ -12,6 +13,7 @@ import { DualCameraView } from "@/components/DualCameraView";
 import { ReadyToggle } from "@/components/ReadyToggle";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { layoutLabel } from "@/components/LayoutPicker";
+import { StripTextEditor } from "@/components/StripTextEditor";
 
 interface PhotoboothSessionProps {
   session: Session;
@@ -31,11 +33,6 @@ type Phase =
   | "between"
   | "done"
   | "error";
-
-function normalizeUrls(value: unknown): string[] {
-  if (Array.isArray(value)) return value as string[];
-  return [];
-}
 
 function photoUrls(session: Session) {
   return {
@@ -58,6 +55,9 @@ export function PhotoboothSession({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [betweenShot, setBetweenShot] = useState(0);
   const [multiShotActive, setMultiShotActive] = useState(false);
+  const [localStripText, setLocalStripText] = useState(() =>
+    resolveStripText(session.strip_text, session.created_at)
+  );
   const countdownStarted = useRef(false);
   const combining = useRef(false);
   const countdownScheduledForRef = useRef(-1);
@@ -66,6 +66,11 @@ export function PhotoboothSession({
 
   const layout = session.layout ?? "strip";
   const totalPhotos = photosPerSession(layout);
+  const isInitiator = session.initiated_by === userId;
+  const stripTextDisplay = resolveStripText(
+    session.strip_text ?? localStripText,
+    session.created_at
+  );
   const { photos1, photos2 } = photoUrls(session);
   const completedShots = Math.min(photos1.length, photos2.length);
 
@@ -104,6 +109,21 @@ export function PhotoboothSession({
     : session.ready_member_1;
   const bothReady = session.ready_member_1 && session.ready_member_2;
 
+  useEffect(() => {
+    setLocalStripText(resolveStripText(session.strip_text, session.created_at));
+  }, [session.strip_text, session.created_at]);
+
+  const persistStripText = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim() || defaultStripText();
+      await supabase
+        .from("sessions")
+        .update({ strip_text: trimmed })
+        .eq("id", session.id);
+    },
+    [session.id, supabase]
+  );
+
   const tryCombineAndFinish = useCallback(
     async (urls1: string[], urls2: string[]) => {
       if (combining.current) return;
@@ -115,7 +135,10 @@ export function PhotoboothSession({
           photo2Url: urls2[i],
         }));
 
-        const text = resolveStripText(session.strip_text, session.created_at);
+        const text = resolveStripText(
+          session.strip_text ?? localStripText,
+          session.created_at
+        );
         const combinedBlob = await combinePhotobooth(layout, shots, text);
         const combinedPath = `${room.id}/${session.id}/combined.jpg`;
 
@@ -136,6 +159,7 @@ export function PhotoboothSession({
           .from("sessions")
           .update({
             combined_url: publicUrl,
+            strip_text: text,
             status: "captured",
             ready_member_1: false,
             ready_member_2: false,
@@ -148,7 +172,7 @@ export function PhotoboothSession({
           .eq("id", session.id);
       }
     },
-    [layout, room.id, session.id, session.strip_text, session.created_at, supabase]
+    [layout, room.id, session.id, session.strip_text, session.created_at, localStripText, supabase]
   );
 
   const startCountdown = useCallback((shotIndex: number) => {
@@ -443,12 +467,21 @@ export function PhotoboothSession({
           {totalPhotos}
           {completedShots > 0 && ` · ${completedShots} saved`}
         </p>
-        {session.strip_text && (
+        {stripTextDisplay && (
           <p className="text-xs text-warm-500 mt-1 italic truncate max-w-xs mx-auto">
-            &ldquo;{session.strip_text}&rdquo;
+            &ldquo;{stripTextDisplay}&rdquo;
           </p>
         )}
       </div>
+
+      {phase === "camera" && isInitiator && !multiShotActive && (
+        <StripTextEditor
+          compact
+          value={localStripText}
+          onChange={setLocalStripText}
+          onCommit={persistStripText}
+        />
+      )}
 
       <div className="relative w-full">
         <DualCameraView

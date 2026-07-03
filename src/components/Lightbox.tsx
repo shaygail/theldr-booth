@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { downloadImage, photoboothFilename } from "@/lib/download-image";
 import { regenerateCombined } from "@/lib/regenerate-combined";
 import { resolveStripText } from "@/lib/strip-text";
+import { canRegenerateSession } from "@/lib/session-shots";
 
 interface LightboxProps {
   session: Session;
@@ -50,7 +51,16 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
     onUpdate(false);
   };
 
+  const canEditStrip = canRegenerateSession(session);
+
   const saveStripText = async () => {
+    if (!canEditStrip) {
+      setStripError(
+        "This photo was saved before strip editing was available. Take a new session to customize the text."
+      );
+      return;
+    }
+
     setSavingStrip(true);
     setStripError(null);
 
@@ -63,8 +73,12 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
       setPreviewUrl(`${publicUrl}?t=${Date.now()}`);
       setLastSavedStrip(stripText.trim());
       onUpdate(false);
-    } catch {
-      setStripError("Could not update strip — try again.");
+    } catch (err) {
+      setStripError(
+        err instanceof Error
+          ? err.message
+          : "Could not update strip — try again."
+      );
     } finally {
       setSavingStrip(false);
     }
@@ -151,6 +165,7 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
                 onClick={saveStripText}
                 disabled={
                   savingStrip ||
+                  !canEditStrip ||
                   stripText.trim() === lastSavedStrip.trim()
                 }
                 className="btn-secondary text-sm py-2 px-3 whitespace-nowrap"
@@ -158,6 +173,11 @@ export function Lightbox({ session, onClose, onUpdate }: LightboxProps) {
                 {savingStrip ? "Updating…" : "Update print"}
               </button>
             </div>
+            {!canEditStrip && (
+              <p className="text-xs text-warm-500">
+                Take a new photobooth session to edit the text on this print.
+              </p>
+            )}
             {stripError && (
               <p className="text-sm text-coral-600">{stripError}</p>
             )}
