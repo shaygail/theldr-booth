@@ -18,7 +18,7 @@ interface UseWebcamOptions {
 }
 
 export function useWebcam(options: UseWebcamOptions = {}) {
-  const { filter = "none", mirrored = true } = options;
+  const { filter = "none", mirrored = false } = options;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);

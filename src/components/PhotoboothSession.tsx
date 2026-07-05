@@ -84,7 +84,7 @@ export function PhotoboothSession({
     capture,
     isActive,
     localStream,
-  } = useWebcam({ filter });
+  } = useWebcam({ filter, mirrored: false });
 
   const cameraPhases =
     phase === "camera" ||
