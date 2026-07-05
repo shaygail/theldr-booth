@@ -16,3 +16,12 @@ ALTER TABLE sessions
 -- Strip text column (004)
 ALTER TABLE sessions
   ADD COLUMN IF NOT EXISTS strip_text TEXT;
+
+-- Countdown duration (006)
+ALTER TABLE sessions
+  ADD COLUMN IF NOT EXISTS countdown_seconds INTEGER NOT NULL DEFAULT 10;
+
+ALTER TABLE sessions DROP CONSTRAINT IF EXISTS sessions_countdown_seconds_check;
+ALTER TABLE sessions
+  ADD CONSTRAINT sessions_countdown_seconds_check
+  CHECK (countdown_seconds IN (5, 10));

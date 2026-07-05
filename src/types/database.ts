@@ -2,6 +2,10 @@ export type SessionStatus = "waiting" | "both_ready" | "captured" | "cancelled";
 
 export type PhotoboothLayout = "single" | "strip" | "columns";
 
+export type CountdownSeconds = 5 | 10;
+
+export const COUNTDOWN_OPTIONS: CountdownSeconds[] = [5, 10];
+
 export function photosPerSession(layout: PhotoboothLayout): number {
   return layout === "single" ? 1 : 4;
 }
@@ -27,6 +31,7 @@ export interface Session {
   photo_1_urls: string[];
   photo_2_urls: string[];
   layout: PhotoboothLayout;
+  countdown_seconds: CountdownSeconds;
   shot_index: number;
   combined_url: string | null;
   strip_text: string | null;

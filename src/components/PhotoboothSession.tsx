@@ -499,7 +499,10 @@ export function PhotoboothSession({
         />
 
         {phase === "countdown" && (
-          <CountdownTimer onComplete={handleCountdownComplete} />
+          <CountdownTimer
+            seconds={session.countdown_seconds ?? 10}
+            onComplete={handleCountdownComplete}
+          />
         )}
 
         {overlayMessage && (

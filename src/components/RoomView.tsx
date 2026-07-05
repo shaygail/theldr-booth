@@ -10,9 +10,10 @@ import { SessionPrompt } from "@/components/SessionPrompt";
 import { Gallery } from "@/components/Gallery";
 import { DaysSince } from "@/components/DaysSince";
 import { LayoutPicker, layoutLabel, layoutPhotoCount } from "@/components/LayoutPicker";
+import { CountdownPicker, countdownLabel } from "@/components/CountdownPicker";
 import { StripTextEditor } from "@/components/StripTextEditor";
 import { defaultStripText } from "@/lib/strip-text";
-import type { PhotoboothLayout } from "@/types/database";
+import type { PhotoboothLayout, CountdownSeconds } from "@/types/database";
 
 interface RoomViewProps {
   room: Room;
@@ -26,6 +27,7 @@ export function RoomView({ room }: RoomViewProps) {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [layout, setLayout] = useState<PhotoboothLayout>("single");
+  const [countdownSeconds, setCountdownSeconds] = useState<CountdownSeconds>(10);
   const [stripText, setStripText] = useState(() => defaultStripText());
   const [tab, setTab] = useState<"booth" | "gallery">("booth");
   const supabase = createClient();
@@ -64,6 +66,7 @@ export function RoomView({ room }: RoomViewProps) {
         initiated_by: user.id,
         status: "waiting",
         layout,
+        countdown_seconds: countdownSeconds,
         strip_text: stripText.trim() || defaultStripText(),
         shot_index: 0,
         photo_1_urls: [],
@@ -76,6 +79,7 @@ export function RoomView({ room }: RoomViewProps) {
       setStartError(
         error.message.includes("strip_text") ||
           error.message.includes("layout") ||
+          error.message.includes("countdown_seconds") ||
           error.message.includes("photo_1_urls")
           ? "Database needs updating — run the latest Supabase migrations."
           : "Could not start session. Please try again."
@@ -194,7 +198,8 @@ export function RoomView({ room }: RoomViewProps) {
                     {layoutPhotoCount(activeSession.layout ?? "single")} photo
                     {layoutPhotoCount(activeSession.layout ?? "single") > 1
                       ? "s"
-                      : ""}
+                      : ""}{" "}
+                    · {countdownLabel((activeSession.countdown_seconds ?? 10) as CountdownSeconds)}
                   </p>
                   <button
                     onClick={() => setInSession(true)}
@@ -213,7 +218,8 @@ export function RoomView({ room }: RoomViewProps) {
                     {layoutPhotoCount(activeSession.layout ?? "single")} photo
                     {layoutPhotoCount(activeSession.layout ?? "single") > 1
                       ? "s"
-                      : ""}
+                      : ""}{" "}
+                    · {countdownLabel((activeSession.countdown_seconds ?? 10) as CountdownSeconds)}
                   </p>
                   <button
                     onClick={() => setInSession(true)}
@@ -231,6 +237,10 @@ export function RoomView({ room }: RoomViewProps) {
                 Ready to capture a moment together, even from far away?
               </p>
               <LayoutPicker value={layout} onChange={setLayout} />
+              <CountdownPicker
+                value={countdownSeconds}
+                onChange={setCountdownSeconds}
+              />
               <StripTextEditor value={stripText} onChange={setStripText} />
               {startError && (
                 <p className="text-sm text-coral-600 text-center max-w-xs">
