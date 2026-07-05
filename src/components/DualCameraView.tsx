@@ -116,10 +116,11 @@ export function DualCameraView({
   return (
     <div className="flex flex-col items-center gap-4 w-full">
       <div className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-xl border border-gold-200">
-        <div className="flex">
+        <div className="flex divide-x-2 divide-coral-500/30">
           <CameraPane
             videoRef={localVideoRef}
             label="You"
+            mirrored
             overlay={localOverlay}
           />
           <CameraPane
