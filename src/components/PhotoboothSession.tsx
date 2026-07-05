@@ -84,7 +84,7 @@ export function PhotoboothSession({
     capture,
     isActive,
     localStream,
-  } = useWebcam({ filter, mirrored: isMember1 });
+  } = useWebcam({ filter });
 
   const cameraPhases =
     phase === "camera" ||
@@ -493,7 +493,6 @@ export function PhotoboothSession({
           filter={filter}
           partnerName={partnerName}
           partnerStatus={partnerStatus}
-          localMirrored={isMember1}
           onFilterChange={setFilter}
           onStart={startCamera}
           onRetry={startCamera}

@@ -14,7 +14,6 @@ interface DualCameraViewProps {
   filter: PhotoFilter;
   partnerName: string;
   partnerStatus: PartnerVideoStatus;
-  localMirrored?: boolean;
   onFilterChange: (filter: PhotoFilter) => void;
   onStart: () => void;
   onRetry: () => void;
@@ -59,7 +58,6 @@ export function DualCameraView({
   filter,
   partnerName,
   partnerStatus,
-  localMirrored = false,
   onFilterChange,
   onStart,
   onRetry,
@@ -122,7 +120,6 @@ export function DualCameraView({
           <CameraPane
             videoRef={localVideoRef}
             label="You"
-            mirrored={localMirrored}
             overlay={localOverlay}
           />
           <CameraPane
